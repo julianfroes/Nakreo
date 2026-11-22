@@ -62,7 +62,7 @@ export function Lobby({ s }: { s: SnapshotHost }) {
                 setBase(e.target.value)
                 localStorage.setItem(CLAVE_URL, e.target.value)
               }}
-              placeholder="http://192.168.1.20:5173/nakreo/"
+              placeholder="http://192.168.1.20:5173/Nakreo/"
             />
           </label>
         )}

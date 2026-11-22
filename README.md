@@ -91,7 +91,7 @@ npm install
 npm run dev
 ```
 
-Abre `http://localhost:5173/nakreo/`. Pulsa **Crear sala** para ser el anfitrión.
+Abre `http://localhost:5173/Nakreo/`. Pulsa **Crear sala** para ser el anfitrión.
 
 ### Probar con teléfonos reales
 
@@ -101,7 +101,7 @@ Los móviles no ven `localhost`. Expón el servidor a tu red local:
 npm run dev -- --host
 ```
 
-En la pantalla del anfitrión (solo cuando estás en `localhost`) aparece un campo **URL base**: escribe la URL de tu equipo, p. ej. `http://192.168.1.20:5173/nakreo/`, y el QR se regenerará con ella. Necesitas conexión a internet (para la señalización de PeerJS) y que los dispositivos estén en la misma red.
+En la pantalla del anfitrión (solo cuando estás en `localhost`) aparece un campo **URL base**: escribe la URL de tu equipo, p. ej. `http://192.168.1.20:5173/Nakreo/`, y el QR se regenerará con ella. Necesitas conexión a internet (para la señalización de PeerJS) y que los dispositivos estén en la misma red.
 
 ### Scripts
 
@@ -128,18 +128,18 @@ La conexión WebRTC real no se prueba automáticamente: hay que verificarla con 
 
 ## Desplegar en GitHub Pages
 
-1. Crea un repositorio llamado **`nakreo`** (la ruta base de Vite es `/nakreo/`; si usas otro nombre, define `VITE_BASE=/otro-nombre/` al construir).
+1. Crea un repositorio llamado **`Nakreo`** (la ruta base de Vite es `/Nakreo/`; si usas otro nombre, define `VITE_BASE=/otro-nombre/` al construir).
 2. Conéctalo y publica:
 
    ```bash
-   git remote add origin https://github.com/<usuario>/nakreo.git
+   git remote add origin https://github.com/<usuario>/Nakreo.git
    git push -u origin main
    npm run deploy
    ```
 
    `npm run deploy` ejecuta lint, tests y build, y sube `dist/` a la rama `gh-pages`.
 3. En GitHub: **Settings → Pages → Source: Deploy from a branch → `gh-pages` / `(root)`**.
-4. El juego quedará en `https://<usuario>.github.io/nakreo/`.
+4. El juego quedará en `https://<usuario>.github.io/Nakreo/`.
 
 La navegación usa **rutas con hash** (`#/host`, `#/join?room=…`), así que no hace falta configuración de reescrituras y el QR puede apuntar directamente a una sala.
 

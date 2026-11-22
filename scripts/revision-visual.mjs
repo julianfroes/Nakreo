@@ -1,10 +1,10 @@
 // Revisión visual: capturas de cada pantalla en móvil y escritorio.
 // Requiere `npm run dev` en marcha y Microsoft Edge o Chrome instalado.
-//   node scripts/revision-visual.mjs [urlBase]   (por defecto http://localhost:5173/nakreo/)
+//   node scripts/revision-visual.mjs [urlBase]   (por defecto http://localhost:5173/Nakreo/)
 import { chromium } from 'playwright-core'
 import { mkdirSync } from 'node:fs'
 
-const base = process.argv[2] ?? 'http://localhost:5173/nakreo/'
+const base = process.argv[2] ?? 'http://localhost:5173/Nakreo/'
 const salida = 'capturas'
 mkdirSync(salida, { recursive: true })
 

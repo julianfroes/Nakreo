@@ -6,6 +6,6 @@ import { defineConfig } from 'vite'
 // por eso `base` debe coincidir con el nombre del repositorio.
 // Se puede sobrescribir con VITE_BASE (p. ej. '/' para dominio propio).
 export default defineConfig({
-  base: process.env.VITE_BASE ?? '/nakreo/',
+  base: process.env.VITE_BASE ?? '/Nakreo/',
   plugins: [react(), tailwindcss()],
 })
