@@ -9,19 +9,16 @@ const TIMEOUT_CONEXION_MS = 30_000
 /**
  * Servidores ICE. STUN descubre la dirección pública; TURN retransmite el tráfico
  * cuando la conexión directa es imposible (Wi-Fi con aislamiento de clientes, NAT
- * estricto, mDNS...). Los TURN gratuitos de PeerJS son best-effort: para algo
- * fiable, define un TURN propio en .env.local (ver README):
- *   VITE_TURN_URL=turn:host:3478  VITE_TURN_USER=...  VITE_TURN_CREDENTIAL=...
+ * estricto, mDNS...). No hay TURN público fiable: los que traía PeerJS por defecto
+ * (turn.peerjs.com) ya no existen. Para tener respaldo, define uno propio en
+ * .env.local (varias URLs separadas por comas; ver README):
+ *   VITE_TURN_URL=turn:host:80,turns:host:443?transport=tcp
+ *   VITE_TURN_USER=...  VITE_TURN_CREDENTIAL=...
  */
 function servidoresIce(): RTCIceServer[] {
   const servidores: RTCIceServer[] = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun.cloudflare.com:3478' },
-    {
-      urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'],
-      username: 'peerjs',
-      credential: 'peerjsp',
-    },
   ]
   const url = import.meta.env.VITE_TURN_URL as string | undefined
   if (url) {
@@ -39,16 +36,22 @@ const opcionesPeer = { config: { iceServers: servidoresIce() } }
 /** Recoge qué tipos de candidatos ICE se obtuvieron, para explicar un fallo de conexión. */
 function vigilarIce(pc: RTCPeerConnection | undefined) {
   const cuenta: Record<string, number> = { host: 0, srflx: 0, relay: 0 }
+  const errores = new Set<string>()
   let estado = 'nuevo'
   pc?.addEventListener('icecandidate', (e) => {
     const tipo = e.candidate?.candidate.match(/ typ (\w+)/)?.[1]
     if (tipo) cuenta[tipo] = (cuenta[tipo] ?? 0) + 1
   })
+  pc?.addEventListener('icecandidateerror', (e) => {
+    const ev = e as RTCPeerConnectionIceErrorEvent
+    errores.add(`${ev.errorCode} ${ev.url}`)
+  })
   pc?.addEventListener('iceconnectionstatechange', () => {
     estado = pc.iceConnectionState
   })
   return () =>
-    `candidatos locales ${cuenta.host}, STUN ${cuenta.srflx}, relé TURN ${cuenta.relay}; estado ICE: ${estado}`
+    `candidatos locales ${cuenta.host}, STUN ${cuenta.srflx}, relé TURN ${cuenta.relay}; estado ICE: ${estado}` +
+    (errores.size ? `; errores: ${[...errores].slice(0, 3).join(', ')}` : '')
 }
 
 /** Mensajes en español para los errores de PeerJS. */
