@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@theme {
+  --animate-sacudida: sacudida 0.6s ease-in-out;
+  --animate-entrada: entrada 0.25s ease-out;
+  --animate-latido: latido 1.6s ease-in-out infinite;
+
+  @keyframes sacudida {
+    0%, 100% { transform: translateX(0); }
+    15%, 45%, 75% { transform: translateX(-8px); }
+    30%, 60%, 90% { transform: translateX(8px); }
+  }
+  @keyframes entrada {
+    from { opacity: 0; transform: translateY(16px) scale(0.97); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes latido {
+    0%, 100% { box-shadow: 0 0 0 0 rgb(34 211 238 / 0.55); }
+    50% { box-shadow: 0 0 0 10px rgb(34 211 238 / 0); }
+  }
+}
+
+html,
+body,
+#root {
+  min-height: 100dvh;
+}
+
+body {
+  @apply bg-slate-950 text-slate-100 antialiased;
+  /* Evita el zoom por doble toque y el resaltado azul en móviles. */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
