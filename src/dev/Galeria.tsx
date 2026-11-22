@@ -8,6 +8,7 @@
  *   #/dev?vista=mesa&esc=defensa
  */
 import { Juego } from '../client/components/Juego'
+import { CerrarSalaConfirmar, ControlesFin } from '../host/components/ControlesAnfitrion'
 import { aplicar } from '../game/engine'
 import { proyectarEstado, proyectarPublico } from '../game/proyeccion'
 import { crearRng } from '../game/rng'
@@ -108,5 +109,15 @@ export default function Galeria() {
 
   if (vista === 'lobby') return <Lobby s={snapshot(null, n)} />
   if (vista === 'mesa') return <Mesa s={snapshot(e, e.jugadores.length)} />
+  if (p.get('anfitrion') === '1') {
+    return (
+      <Juego
+        p={proyectarEstado(e, como)}
+        modoAnfitrion
+        menuAnfitrion={<CerrarSalaConfirmar />}
+        controlesFin={<ControlesFin s={snapshot(e, e.jugadores.length)} />}
+      />
+    )
+  }
   return <Juego p={proyectarEstado(e, como)} />
 }

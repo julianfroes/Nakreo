@@ -6,6 +6,9 @@ export function HomeScreen() {
     <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center gap-4 p-6">
       <h1 className="mb-8 text-center text-5xl font-bold tracking-tight">Nakreo</h1>
       <Button onClick={() => navigate('/host')}>Crear sala</Button>
+      <Button variant="secondary" onClick={() => navigate('/host?jugar=1')}>
+        Crear sala y jugar
+      </Button>
       <Button variant="secondary" onClick={() => navigate('/join')}>
         Unirme
       </Button>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Button } from '../../shared/components/Button'
 import { useCliente } from '../store'
 
@@ -69,17 +69,30 @@ export function Lobby() {
   )
 }
 
-export function PantallaFinal({ ganador, gane }: { ganador: string; gane: boolean }) {
+export function PantallaFinal({
+  ganador,
+  gane,
+  controles,
+}: {
+  ganador: string
+  gane: boolean
+  /** Si se indica (anfitrión que juega), sustituye al texto de espera y al botón Salir. */
+  controles?: ReactNode
+}) {
   const salir = useCliente((s) => s.salir)
   return (
     <main className={caja}>
       <p className="text-center text-7xl">{gane ? '🏆' : '🏁'}</p>
       <h1 className="text-center text-3xl font-bold">{gane ? '¡Has ganado!' : 'Partida terminada'}</h1>
       {!gane && <p className="text-center text-slate-300">Ganador: {ganador}</p>}
-      <p className="text-center text-sm text-slate-500">
-        Si el anfitrión inicia otra partida, aparecerá aquí automáticamente.
-      </p>
-      <Button variant="secondary" onClick={salir}>Salir</Button>
+      {controles ?? (
+        <>
+          <p className="text-center text-sm text-slate-500">
+            Si el anfitrión inicia otra partida, aparecerá aquí automáticamente.
+          </p>
+          <Button variant="secondary" onClick={salir}>Salir</Button>
+        </>
+      )}
     </main>
   )
 }

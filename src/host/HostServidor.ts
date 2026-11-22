@@ -10,6 +10,7 @@ import { barajar, type Rng } from '../game/rng'
 import { crearPartida } from '../game/setup'
 import type { EstadoJuego, EventoJuego, Intencion } from '../game/types'
 import { generarCodigoSala } from '../shared/codigoSala'
+import { crearParLocal } from '../shared/conexionLocal'
 import {
   parsearMensajeCliente,
   type CodigoErrorRed,
@@ -101,6 +102,17 @@ export class HostServidor {
 
   get iniciada(): boolean {
     return this.estado !== null
+  }
+
+  /**
+   * Conexión en memoria para que el propio anfitrión juegue en su sala. Se trata
+   * como cualquier otra conexión (el jugador local solo recibe su proyección).
+   * Devuelve el extremo del cliente.
+   */
+  conectarLocal(): Conexion {
+    const [extremoCliente, extremoServidor] = crearParLocal()
+    this.alNuevaConexion(extremoServidor)
+    return extremoCliente
   }
 
   /** Suscribe a cambios (sala o partida). Devuelve la función para cancelar. */

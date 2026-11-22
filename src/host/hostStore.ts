@@ -23,6 +23,9 @@ let generacion = 0
 
 type VentanaDebug = { nakreo?: unknown }
 
+/** Instancia actual del anfitrión (para unir al propio anfitrión como jugador local). */
+export const obtenerHost = (): HostServidor | null => host
+
 export const useHost = create<HostState>((set, get) => ({
   snapshot: null,
   error: null,

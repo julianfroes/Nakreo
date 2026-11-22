@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import type { EstadoProyectado } from '../../game/proyeccion'
 import { Button } from '../../shared/components/Button'
 import { detectarSenal, vibrar } from '../feedback'
@@ -12,7 +12,17 @@ import { PanelRespuesta } from './PanelRespuesta'
 import { PantallaFinal } from './Pantallas'
 
 /** Pantalla de juego: cabecera, mis cartas y el panel que corresponda a la fase. */
-export function Juego({ p }: { p: EstadoProyectado }) {
+interface Props {
+  p: EstadoProyectado
+  /** El anfitrión también juega: sin "Salir" (cerrar sala es otra acción). */
+  modoAnfitrion?: boolean
+  /** Control extra (p. ej. cerrar sala) bajo mis cartas. */
+  menuAnfitrion?: ReactNode
+  /** Sustituye al botón "Salir" en la pantalla de fin (reiniciar, volver al lobby...). */
+  controlesFin?: ReactNode
+}
+
+export function Juego({ p, modoAnfitrion = false, menuAnfitrion, controlesFin }: Props) {
   const { enviar, pendiente, conexion, intento, error, limpiarError, salir } = useCliente()
   const vista = useMemo(() => calcularVista(p), [p])
 
@@ -32,7 +42,7 @@ export function Juego({ p }: { p: EstadoProyectado }) {
   }, [error, limpiarError])
 
   if (vista.tipo === 'fin') {
-    return <PantallaFinal ganador={nombreDe(p, vista.ganador)} gane={vista.gane} />
+    return <PantallaFinal ganador={nombreDe(p, vista.ganador)} gane={vista.gane} controles={controlesFin} />
   }
 
   // Cambia en cada decisión nueva, para reiniciar la selección de los overlays.
@@ -48,6 +58,7 @@ export function Juego({ p }: { p: EstadoProyectado }) {
       <BarraEstado p={p} />
       <div className="flex-1">
         <Mano mano={p.yo.mano} />
+        {menuAnfitrion && <div className="px-4 pb-4">{menuAnfitrion}</div>}
       </div>
 
       {/* Con muchas acciones (mi turno) el panel fluye con la página para no tapar mis cartas;
@@ -81,7 +92,7 @@ export function Juego({ p }: { p: EstadoProyectado }) {
         {vista.tipo === 'eliminado' && (
           <>
             <p className="py-2 text-center text-slate-300">Has sido eliminado. Sigues como espectador.</p>
-            <Button variant="secondary" onClick={salir}>Salir</Button>
+            {!modoAnfitrion && <Button variant="secondary" onClick={salir}>Salir</Button>}
           </>
         )}
         {pendiente && <p className="text-center text-xs text-slate-500">Enviando…</p>}

@@ -8,6 +8,8 @@ import type { EstadoProyectado } from '../game/proyeccion'
 import { normalizarCodigo } from '../shared/codigoSala'
 import { conectarPeer } from '../shared/peerTransporte'
 import type { IntencionCliente, JugadorSala } from '../shared/protocolo'
+import type { HostServidor } from '../host/HostServidor'
+import type { Conexion } from '../shared/transporte'
 import { unirseASala, type ClienteConexion } from './ClienteConexion'
 
 export type EstadoConexion = 'inicio' | 'conectando' | 'conectado' | 'reconectando'
@@ -26,6 +28,8 @@ interface ClienteState {
   /** true entre enviar una intención y recibir la respuesta del host. */
   pendiente: boolean
   unirse(codigo: string, nombre: string): Promise<void>
+  /** El anfitrión se une a su propia sala por una conexión en memoria (sin reconexión ni sesión guardada). */
+  unirseLocal(host: HostServidor, nombre: string): Promise<void>
   retomarSesion(codigoUrl: string | null): void
   enviar(intencion: IntencionCliente): void
   limpiarError(): void
@@ -54,14 +58,17 @@ const inicial = {
 let cliente: ClienteConexion | null = null
 let cierreDeliberado = false
 let temporizador: ReturnType<typeof setTimeout> | null = null
+/** Cómo se abre la conexión: PeerJS normalmente, memoria para el anfitrión-jugador. */
+let conector: (codigo: string) => Promise<Conexion> = conectarPeer
+let local = false
 
 export const useCliente = create<ClienteState>((set, get) => {
   /** Abre una conexión nueva. Lanza si no se puede alcanzar la sala. */
   async function abrir(codigo: string, nombre: string) {
-    const nuevo = await unirseASala(codigo, nombre, conectarPeer, {
+    const nuevo = await unirseASala(codigo, nombre, conector, {
       alBienvenida: (id) => {
         set({ idJugador: id, conexion: 'conectado', intento: 0 })
-        sessionStorage.setItem(CLAVE_SESION, JSON.stringify({ codigo, nombre }))
+        if (!local) sessionStorage.setItem(CLAVE_SESION, JSON.stringify({ codigo, nombre }))
       },
       // Si el anfitrión vuelve al lobby (iniciada = false), se descarta la partida terminada.
       alSala: (jugadores, iniciada) =>
@@ -72,7 +79,8 @@ export const useCliente = create<ClienteState>((set, get) => {
         set({ error: mensaje, pendiente: false })
       },
       alCerrar: () => {
-        if (cliente === nuevo && !cierreDeliberado) reconectar(codigo, nombre, 1, 0)
+        // La conexión local solo se cierra al cerrar la sala: no hay a dónde reconectar.
+        if (!local && cliente === nuevo && !cierreDeliberado) reconectar(codigo, nombre, 1, 0)
       },
     })
     cliente = nuevo
@@ -110,12 +118,26 @@ export const useCliente = create<ClienteState>((set, get) => {
       const codigo = normalizarCodigo(codigoCrudo)
       if (!codigo) return set({ error: 'Código de sala inválido' })
       cierreDeliberado = false
+      local = false
+      conector = conectarPeer
       set({ ...inicial, conexion: 'conectando', codigo, nombre })
       try {
         await abrir(codigo, nombre)
       } catch (e) {
         // Se conserva el código para poder corregirlo o reintentar sin reescribirlo.
         set({ ...inicial, codigo, nombre, error: (e as Error).message })
+      }
+    },
+
+    async unirseLocal(host, nombre) {
+      cierreDeliberado = false
+      local = true
+      conector = async () => host.conectarLocal()
+      set({ ...inicial, conexion: 'conectando', codigo: host.codigo, nombre })
+      try {
+        await abrir(host.codigo, nombre)
+      } catch (e) {
+        set({ ...inicial, codigo: host.codigo, nombre, error: (e as Error).message })
       }
     },
 
@@ -144,6 +166,7 @@ export const useCliente = create<ClienteState>((set, get) => {
       if (temporizador) clearTimeout(temporizador)
       cliente?.cerrar()
       cliente = null
+      local = false
       sessionStorage.removeItem(CLAVE_SESION)
       set({ ...inicial })
     },

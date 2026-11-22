@@ -25,6 +25,15 @@ En su turno, cada jugador hace **una** acción:
 - **Límite de créditos:** con **14 ◈ o más** no se pueden hacer acciones que den créditos; hay que gastar.
 - Al perder la segunda carta, un jugador queda eliminado. Al terminar la partida, el anfitrión puede **jugar de nuevo** (mismos jugadores, cartas nuevas) o **volver al lobby** para que entren jugadores nuevos.
 
+## Dos formas de ser anfitrión
+
+| Modo | Botón | Qué ve el anfitrión |
+|---|---|---|
+| **Mesa** | «Crear sala» | Pantalla grande (laptop o TV) con la vista pública: jugadores, créditos, cartas perdidas, registro y QR. No juega |
+| **Anfitrión-jugador** | «Crear sala y jugar» | La pantalla de un **jugador**: solo sus cartas privadas y acciones, **sin** la vista general. Útil si no hay un ordenador para hacer de mesa |
+
+En el modo anfitrión-jugador, el navegador administra la sala y se une a ella como un jugador más por una **conexión local en memoria** (`src/shared/conexionLocal.ts`). El anfitrión la trata igual que a cualquier teléfono (identidad por conexión, validación y proyección), así que el jugador local recibe únicamente su proyección privada. Desde esa pantalla puede iniciar la partida y, al terminar, **jugar de nuevo**, **volver al lobby** o **cerrar la sala** (también hay un «Cerrar sala…» con confirmación durante la partida).
+
 ## Arquitectura
 
 ```
@@ -124,7 +133,13 @@ En la pantalla del anfitrión (solo cuando estás en `localhost`) aparece un cam
 - **Red:** lobby, suplantación de identidad, mensajes inválidos, reconexión y desconexión, usando un transporte falso en memoria.
 - **Vista del cliente:** qué panel y qué acciones se muestran en cada fase.
 
-La conexión WebRTC real no se prueba automáticamente: hay que verificarla con dispositivos.
+La conexión WebRTC real no entra en `npm test`, pero hay una prueba de extremo a extremo con dos navegadores (anfitrión-jugador + invitado, con `npm run dev` en marcha, internet y Edge/Chrome):
+
+```bash
+node scripts/e2e-anfitrion-jugador.mjs
+```
+
+Ambos navegadores corren en la misma máquina, así que no sustituye a probar con teléfonos reales en redes distintas.
 
 ## Desplegar en GitHub Pages
 
@@ -149,7 +164,8 @@ La navegación usa **rutas con hash** (`#/host`, `#/join?room=…`), así que no
 - **HTTPS.** GitHub Pages sirve por HTTPS, y desde una página HTTPS solo se puede usar señalización cifrada (el servidor público de PeerJS lo es). Los canales de datos WebRTC en sí no exigen HTTPS, pero sí lo hace cualquier despliegue en Pages.
 - **Dependencia del servidor de señalización público** de PeerJS (`0.peerjs.com`): sin garantías de disponibilidad. Solo se usa para establecer la conexión; el juego va directo entre navegadores.
 - **Sin servidor TURN por defecto:** no existe un TURN público fiable (los que traía PeerJS, `turn.peerjs.com`, ya no responden; se verificó con `scripts/probar-turn.mjs`). Si la conexión directa entre dos dispositivos es imposible (Wi-Fi con aislamiento de clientes, mDNS bloqueado, NAT estricto), la conexión falla. Para tener respaldo, configura un TURN propio (ver «Problemas de conexión»).
-- **El anfitrión ve toda la información** (es el árbitro). La arquitectura protege a los jugadores entre sí, no de un anfitrión tramposo.
+- **El anfitrión ve toda la información** (es el árbitro). La arquitectura protege a los jugadores entre sí, no de un anfitrión tramposo. En el modo anfitrión-jugador la pantalla no muestra nada ajeno, pero el estado completo sigue en la memoria de ese navegador y alguien con conocimientos técnicos podría inspeccionarlo con las herramientas de desarrollador.
+- **Pantalla encendida:** la aplicación pide al navegador que no apague la pantalla (Screen Wake Lock) en las pantallas de anfitrión y de jugador. Requiere HTTPS y un navegador compatible (Chrome en Android, Safari 16.4+), y el sistema puede ignorarlo con el ahorro de batería. Si el anfitrión es un móvil y cambia de app o se bloquea, la partida se cae para todos.
 - **Sin temporizadores:** un jugador desconectado o inactivo bloquea la partida hasta que vuelve.
 - **Sin persistencia:** no se guarda nada; cada partida vive en memoria.
 - **Vibración:** `navigator.vibrate` no existe en iOS Safari; allí solo hay feedback visual.
