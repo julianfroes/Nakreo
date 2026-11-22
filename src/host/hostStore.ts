@@ -11,6 +11,8 @@ interface HostState {
   error: string | null
   crearSala(): Promise<void>
   iniciarPartida(): void
+  reiniciarPartida(): void
+  volverAlLobby(): void
   cerrarSala(): void
 }
 
@@ -44,6 +46,24 @@ export const useHost = create<HostState>((set, get) => ({
   iniciarPartida() {
     try {
       host?.iniciarPartida()
+    } catch (e) {
+      set({ error: (e as Error).message })
+    }
+  },
+
+  reiniciarPartida() {
+    try {
+      set({ error: null })
+      host?.reiniciarPartida()
+    } catch (e) {
+      set({ error: (e as Error).message })
+    }
+  },
+
+  volverAlLobby() {
+    try {
+      set({ error: null })
+      host?.volverAlLobby()
     } catch (e) {
       set({ error: (e as Error).message })
     }

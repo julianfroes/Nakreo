@@ -9,6 +9,7 @@ import {
   type Conexion,
   type ServidorTransporte,
 } from '../shared/transporte'
+import type { EstadoJuego } from '../game/types'
 import { crearHost, HostServidor } from './HostServidor'
 
 // ------------------------------------------------------------ Transporte falso
@@ -369,5 +370,69 @@ describe('snapshot para la UI del anfitrión', () => {
     expect(host.snapshot().puedeIniciar).toBe(true)
     b.cerrar()
     expect(host.snapshot().puedeIniciar).toBe(false)
+  })
+})
+
+describe('reinicio de partida', () => {
+  /** Lleva la partida al fin: j2 se queda con una carta y j1 le da un golpe. */
+  function hastaElFin() {
+    const { srv, host } = sala()
+    const cs = unir(srv, 2)
+    host.iniciarPartida()
+    const interno = host as unknown as { estado: EstadoJuego }
+    interno.estado.jugadores[1].cartas[1].revelada = true
+    interno.estado.jugadores[0].creditos = 7
+    cs[0].enviar({ tipo: 'intencion', intencion: { tipo: 'elegirAccion', accion: 'golpe', objetivo: 'j2' } })
+    expect(host.snapshot().mesa!.fase.tipo).toBe('fin')
+    return { srv, host, cs }
+  }
+
+  it('solo se puede reiniciar cuando la partida terminó', () => {
+    const { srv, host } = sala()
+    unir(srv, 2)
+    host.iniciarPartida()
+    expect(() => host.reiniciarPartida()).toThrow()
+    expect(() => host.volverAlLobby()).toThrow()
+  })
+
+  it('«jugar de nuevo» reparte una partida nueva con los mismos jugadores', () => {
+    const { host, cs } = hastaElFin()
+    host.reiniciarPartida()
+    const mesa = host.snapshot().mesa!
+    expect(mesa.fase.tipo).toBe('accion')
+    expect(mesa.turno).toBe(1)
+    expect(mesa.jugadores.map((j) => j.eliminado)).toEqual([false, false])
+    expect(mesa.jugadores.every((j) => j.creditos === 2 && j.cartasVivas === 2)).toBe(true)
+    // Ambos reciben su nueva mano.
+    for (const c of cs) {
+      const est = ultimo(c, 'estado') as Extract<MensajeHost, { tipo: 'estado' }>
+      expect(est.proyeccion.fase.tipo).toBe('accion')
+      expect(est.proyeccion.yo.mano.every((x) => !x.revelada)).toBe(true)
+    }
+  })
+
+  it('descarta a los desconectados y exige 2 jugadores conectados', () => {
+    const { srv, host, cs } = hastaElFin()
+    const [, b] = cs
+    b.cerrar()
+    expect(() => host.reiniciarPartida()).toThrow(/al menos 2/)
+    const b2 = srv.conectar()
+    unirse(b2, 'Otro', tokenDe('2'))
+    expect(() => host.reiniciarPartida()).not.toThrow()
+  })
+
+  it('«volver al lobby» avisa a los clientes y permite entrar jugadores nuevos', () => {
+    const { srv, host, cs } = hastaElFin()
+    host.volverAlLobby()
+    expect(host.iniciada).toBe(false)
+    const s = ultimo(cs[0], 'sala') as Extract<MensajeHost, { tipo: 'sala' }>
+    expect(s.iniciada).toBe(false)
+
+    const nuevo = srv.conectar()
+    unirse(nuevo, 'Nuevo', tokenDe('nuevo'))
+    expect(ultimo(nuevo, 'bienvenida')).toEqual({ tipo: 'bienvenida', idJugador: 'j3' })
+    expect(host.snapshot().puedeIniciar).toBe(true)
+    host.iniciarPartida()
+    expect(host.snapshot().mesa!.jugadores).toHaveLength(3)
   })
 })

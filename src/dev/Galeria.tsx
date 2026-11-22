@@ -71,7 +71,11 @@ const ESCENARIOS: Record<string, (n: number) => EstadoJuego> = {
     e.jugadorActivo = 'b'
     return e
   },
-  fin: () => pasos(base(2, { b: ['ingeniero', 'ingeniero'] }, { a: 7 }), { tipo: 'elegirAccion', jugador: 'a', accion: 'golpe', objetivo: 'b' }),
+  fin: () => {
+    const e = base(2, { b: ['ingeniero', 'ingeniero'] }, { a: 7 })
+    e.jugadores[1].cartas[1].revelada = true // a Beto solo le queda una carta
+    return pasos(e, { tipo: 'elegirAccion', jugador: 'a', accion: 'golpe', objetivo: 'b' })
+  },
   // Mesa con partida avanzada: cartas perdidas y registro largo
   avanzada: (n) => {
     let e = base(n, MANOS, { a: 7 })

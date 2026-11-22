@@ -23,7 +23,7 @@ En su turno, cada jugador hace **una** acción:
 - **Faroles:** puedes declarar una acción de rol aunque no tengas la carta.
 - **Desafíos:** cualquier jugador puede desafiar una acción de rol o un bloqueo. El desafiado debe mostrar la carta. Si la tiene, el desafiante pierde una carta y el desafiado cambia la suya por otra del mazo. Si no, el desafiado pierde la carta que mostró y su acción se cancela. También puede **rendirse** y perder una carta a su elección.
 - **Límite de créditos:** con **14 ◈ o más** no se pueden hacer acciones que den créditos; hay que gastar.
-- Al perder la segunda carta, un jugador queda eliminado.
+- Al perder la segunda carta, un jugador queda eliminado. Al terminar la partida, el anfitrión puede **jugar de nuevo** (mismos jugadores, cartas nuevas) o **volver al lobby** para que entren jugadores nuevos.
 
 ## Arquitectura
 
@@ -148,12 +148,39 @@ La navegación usa **rutas con hash** (`#/host`, `#/join?room=…`), así que no
 - **El anfitrión debe mantener la pestaña abierta**: es el servidor de la partida. Si la cierra o recarga, la partida se pierde. Además, los navegadores pueden suspender pestañas en segundo plano o con la pantalla bloqueada; conviene dejar la pestaña visible y el equipo despierto.
 - **HTTPS.** GitHub Pages sirve por HTTPS, y desde una página HTTPS solo se puede usar señalización cifrada (el servidor público de PeerJS lo es). Los canales de datos WebRTC en sí no exigen HTTPS, pero sí lo hace cualquier despliegue en Pages.
 - **Dependencia del servidor de señalización público** de PeerJS (`0.peerjs.com`): sin garantías de disponibilidad. Solo se usa para establecer la conexión; el juego va directo entre navegadores.
-- **Sin servidor TURN:** algunas redes móviles o corporativas con NAT estricto pueden no lograr la conexión P2P.
+- **TURN gratuito de PeerJS, sin garantías:** si la conexión directa es imposible (NAT estricto, Wi-Fi con aislamiento de clientes), el tráfico se retransmite por un TURN público de la comunidad, que puede estar saturado. Para algo fiable, configura uno propio (ver «Problemas de conexión»).
 - **El anfitrión ve toda la información** (es el árbitro). La arquitectura protege a los jugadores entre sí, no de un anfitrión tramposo.
 - **Sin temporizadores:** un jugador desconectado o inactivo bloquea la partida hasta que vuelve.
 - **Sin persistencia:** no se guarda nada; cada partida vive en memoria.
 - **Vibración:** `navigator.vibrate` no existe en iOS Safari; allí solo hay feedback visual.
 - **Iconos provisionales** (emoji); el arte propio está pendiente.
+
+## Problemas de conexión
+
+Si un dispositivo muestra «No se pudo establecer la conexión con el anfitrión», el mensaje incluye un resumen de la negociación WebRTC (`candidatos locales N, STUN N, relé TURN N; estado ICE: …`). Cómo leerlo:
+
+- **STUN 0:** el dispositivo no alcanza los servidores STUN (red que bloquea UDP).
+- **Relé TURN 0:** no se pudo usar el TURN; la conexión depende de que ambos dispositivos se vean directamente.
+- **Estado ICE `checking` o `failed`:** no hay camino entre los dos dispositivos.
+
+Causas habituales y soluciones:
+
+1. **Aislamiento de clientes («AP isolation») en el router o Wi-Fi de invitados:** los dispositivos de la misma Wi-Fi no pueden comunicarse entre sí. Desactívalo o usa otra red.
+2. **El anfitrión usa Chrome con candidatos mDNS** (ocultan la IP local con un nombre `.local`), que algunos móviles no resuelven. Para comprobarlo, en el Chrome del anfitrión abre `chrome://flags/#enable-webrtc-hide-local-ips-with-mdns`, desactívalo y reinicia el navegador.
+3. **Prueba con datos móviles** en el teléfono (con el juego publicado en GitHub Pages): descarta problemas de la Wi-Fi local.
+4. **VPN o DNS privado** en el dispositivo: desactívalos para probar.
+
+### TURN propio (opcional, el más fiable)
+
+Un servidor TURN retransmite el tráfico y funciona en casi cualquier red. Hay planes gratuitos (p. ej. Metered Open Relay) o puedes alojar `coturn`. Crea un archivo `.env.local` (está en `.gitignore`) y vuelve a construir:
+
+```
+VITE_TURN_URL=turn:tu-servidor:3478
+VITE_TURN_USER=usuario
+VITE_TURN_CREDENTIAL=clave
+```
+
+> Las credenciales acaban dentro del JavaScript publicado, así que cualquiera podría verlas. Usa un plan con límite de tráfico y no reutilices credenciales importantes.
 
 ## Estructura
 

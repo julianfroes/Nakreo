@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { EstadoPublico, JugadorPublico } from '../../game/proyeccion'
+import { MIN_JUGADORES } from '../../game/config'
 import { Button } from '../../shared/components/Button'
 import { ROL_UI } from '../../shared/rolesUI'
 import { describirFase, textoEvento } from '../../shared/textos'
@@ -121,7 +122,7 @@ function Registro({ mesa }: { mesa: EstadoPublico }) {
 }
 
 export function Mesa({ s }: { s: SnapshotHost }) {
-  const cerrarSala = useHost((h) => h.cerrarSala)
+  const { cerrarSala, reiniciarPartida, volverAlLobby, error } = useHost()
   const mesa = s.mesa!
   const conectado = (id: string) => s.jugadores.find((j) => j.id === id)?.conectado ?? false
   const fase = mesa.fase
@@ -144,7 +145,17 @@ export function Mesa({ s }: { s: SnapshotHost }) {
         <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-slate-950/95 p-6 text-center animate-entrada">
           <p className="text-8xl">🏆</p>
           <h1 className="text-5xl font-bold xl:text-7xl">¡{ganador.nombre} gana!</h1>
-          <div className="w-full max-w-xs"><Button onClick={() => { cerrarSala(); navigate('/') }}>Cerrar sala</Button></div>
+          {error && <p role="alert" className="text-rose-300">{error}</p>}
+          <div className="flex w-full max-w-xs flex-col gap-3">
+            <Button disabled={s.jugadores.filter((j) => j.conectado).length < MIN_JUGADORES} onClick={reiniciarPartida}>
+              Jugar de nuevo
+            </Button>
+            <Button variant="secondary" onClick={volverAlLobby}>Volver al lobby</Button>
+            <Button variant="secondary" onClick={() => { cerrarSala(); navigate('/') }}>Cerrar sala</Button>
+          </div>
+          <p className="max-w-xs text-sm text-slate-500">
+            «Jugar de nuevo» reparte cartas nuevas con los mismos jugadores conectados. «Volver al lobby» permite que entren jugadores nuevos.
+          </p>
         </div>
       )}
     </main>

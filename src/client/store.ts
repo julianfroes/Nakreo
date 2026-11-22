@@ -63,7 +63,9 @@ export const useCliente = create<ClienteState>((set, get) => {
         set({ idJugador: id, conexion: 'conectado', intento: 0 })
         sessionStorage.setItem(CLAVE_SESION, JSON.stringify({ codigo, nombre }))
       },
-      alSala: (jugadores, iniciada) => set({ sala: { jugadores, iniciada } }),
+      // Si el anfitrión vuelve al lobby (iniciada = false), se descarta la partida terminada.
+      alSala: (jugadores, iniciada) =>
+        set(iniciada ? { sala: { jugadores, iniciada } } : { sala: { jugadores, iniciada }, proyeccion: null }),
       alEstado: (proyeccion) => set({ proyeccion, pendiente: false }),
       alError: (c, mensaje) => {
         if (ERRORES_FATALES.includes(c)) get().salir()

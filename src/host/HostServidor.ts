@@ -6,7 +6,7 @@
 import { aplicar } from '../game/engine'
 import { MAX_JUGADORES, MIN_JUGADORES } from '../game/config'
 import { proyectarEstado, proyectarPublico, type EstadoPublico } from '../game/proyeccion'
-import type { Rng } from '../game/rng'
+import { barajar, type Rng } from '../game/rng'
 import { crearPartida } from '../game/setup'
 import type { EstadoJuego, EventoJuego, Intencion } from '../game/types'
 import { generarCodigoSala } from '../shared/codigoSala'
@@ -81,6 +81,7 @@ export class HostServidor {
   private estado: EstadoJuego | null = null
   private oyentes = new Set<(s: SnapshotHost) => void>()
   private senalizacionOk = true
+  private siguienteAsiento = 1
 
   constructor(codigo: string, servidor: ServidorTransporte, opciones: OpcionesHost = {}) {
     this.codigo = codigo
@@ -149,6 +150,37 @@ export class HostServidor {
     this.difundirSala()
     this.difundirEstado([...this.estado.registro])
     this.notificar()
+  }
+
+  /** Nueva partida con los mismos jugadores (los desconectados se descartan). Solo tras el fin. */
+  reiniciarPartida() {
+    this.exigirFin()
+    this.quitarDesconectados()
+    this.asientos = barajar(this.asientos, this.rng) // cambia quién empieza
+    this.estado = null
+    this.iniciarPartida()
+  }
+
+  /** Vuelve al lobby para que entren jugadores nuevos antes de iniciar. Solo tras el fin. */
+  volverAlLobby() {
+    this.exigirFin()
+    this.quitarDesconectados()
+    this.estado = null
+    this.log.info('Vuelta al lobby')
+    this.difundirSala()
+    this.notificar()
+  }
+
+  private exigirFin() {
+    if (this.estado?.fase.tipo !== 'fin') throw new Error('La partida no ha terminado')
+    const conectados = this.asientos.filter((a) => a.conexion).length
+    if (conectados < MIN_JUGADORES) {
+      throw new Error(`Se necesitan al menos ${MIN_JUGADORES} jugadores conectados`)
+    }
+  }
+
+  private quitarDesconectados() {
+    this.asientos = this.asientos.filter((a) => a.conexion !== null)
   }
 
   cerrar() {
@@ -221,7 +253,7 @@ export class HostServidor {
     if (this.asientos.length >= MAX_JUGADORES) return this.rechazar(c, 'salaLlena', 'Sala llena')
 
     const asiento: Asiento = {
-      id: `j${this.asientos.length + 1}`,
+      id: `j${this.siguienteAsiento++}`,
       nombre: msg.nombre,
       token: msg.token,
       conexion: c,
