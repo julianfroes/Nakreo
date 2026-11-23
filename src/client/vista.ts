@@ -32,7 +32,14 @@ export type Vista =
    * Puedo bloquear alegando alguno de `roles`. Si `explosion`, y soy el objetivo de un
    * ataque, también puedo «explotar el site» desde aquí (a la vez; no hace falta bloquear antes).
    */
-  | { tipo: 'responderBloqueo'; accion: Accion; roles: Reclamo[]; explosion: { pago: number } | null }
+  | {
+      tipo: 'responderBloqueo'
+      accion: Accion
+      roles: Reclamo[]
+      explosion: { pago: number } | null
+      /** Contrabloqueo: me bloquearon la acción y puedo alegar Ingeniero para anular el bloqueo. */
+      contra: boolean
+    }
   | { tipo: 'responderDesafioBloqueo'; accion: Accion; bloqueador: string; reclamo: Reclamo }
   /** Me atacan (Demanda/Despido): puedo «explotar el site» (Ingeniero Especial). */
   | { tipo: 'explotarSite'; accion: Accion; pago: number }
@@ -107,7 +114,8 @@ export function calcularVista(p: EstadoProyectado): Vista {
         ? {
             tipo: 'responderBloqueo',
             accion: f.accion,
-            roles: bloqueosVigentes(f.accion.tipo, p.especiales),
+            roles: f.contra ? [ACCIONES[f.accion.tipo].contrabloqueo!] : bloqueosVigentes(f.accion.tipo, p.especiales),
+            contra: !!f.contra,
             explosion: f.explosion ? { pago: Math.min(EXPLOSION_COSTE, p.yo.creditos) } : null,
           }
         : { tipo: 'esperando', mensaje: esperaA(p, f.pendientes) }

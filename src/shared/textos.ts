@@ -32,7 +32,7 @@ export function textoEvento(ev: EventoJuego, n: Nombre): string {
     case 'cartaIntercambiada':
       return `${n(ev.jugador)} cambia su carta por una del mazo`
     case 'bloqueoDeclarado':
-      return `${n(ev.bloqueador)} bloquea como ${nombreReclamo(ev)}`
+      return `${n(ev.bloqueador)} ${ev.contra ? 'contrabloquea' : 'bloquea'} como ${nombreReclamo(ev)}`
     case 'cartaPerdida':
       return `${n(ev.jugador)} pierde ${nombreReclamo(ev)}`
     case 'jugadorEliminado':
@@ -81,9 +81,11 @@ export function describirFase(
     case 'ventanaDesafioAccion':
       return `${describirAccion(f.accion, n)}. ¿Alguien desafía? Esperando a ${lista(f.pendientes)}`
     case 'ventanaBloqueo':
-      return `${describirAccion(f.accion, n)}. ¿Alguien bloquea? Esperando a ${lista(f.pendientes)}`
+      return f.contra
+        ? `${describirAccion(f.accion, n)}. RH la bloquea: ${lista(f.pendientes)} decide si contrabloquea como Ingeniero`
+        : `${describirAccion(f.accion, n)}. ¿Alguien bloquea? Esperando a ${lista(f.pendientes)}`
     case 'ventanaDesafioBloqueo':
-      return `${n(f.bloqueo.jugador)} bloquea como ${nombreReclamo(f.bloqueo)}. ¿Alguien desafía? Esperando a ${lista(f.pendientes)}`
+      return `${n(f.bloqueo.jugador)} ${f.bloqueo.contra ? 'contrabloquea' : 'bloquea'} como ${nombreReclamo(f.bloqueo)}. ¿Alguien desafía? Esperando a ${lista(f.pendientes)}`
     case 'revelacion':
       return `${n(f.acusado)} debe probar que es ${nombreReclamo(f)}`
     case 'ventanaIngeniero':

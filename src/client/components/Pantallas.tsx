@@ -11,7 +11,7 @@ const caja = 'mx-auto flex min-h-dvh max-w-sm flex-col justify-center gap-4 p-6 
 
 export function UnirseForm({ codigoInicial }: { codigoInicial: string }) {
   const {
-    unirse, nombre: nombreGuardado, codigo: codigoGuardado, error, conexion, rechazo, limpiarRechazo,
+    unirse, nombre: nombreGuardado, codigo: codigoGuardado, error, conexion, rechazo, limpiarRechazo, salir,
   } = useCliente()
   const [codigo, setCodigo] = useState(codigoGuardado ?? codigoInicial)
   const [nombre, setNombre] = useState(nombreGuardado)
@@ -59,6 +59,15 @@ export function UnirseForm({ codigoInicial }: { codigoInicial: string }) {
         onClick={() => void unirse(codigo, nombre.trim())}
       >
         {ocupado ? 'Conectando…' : 'Unirme'}
+      </Button>
+      <Button
+        variant="secondary"
+        onClick={() => {
+          salir()
+          navigate('/')
+        }}
+      >
+        ← Volver al inicio
       </Button>
     </main>
   )

@@ -388,3 +388,69 @@ describe('rendirse', () => {
     expect(aplicar(e, { tipo: 'rendirse', jugador: 'a', cartaId: carta(e, 'a', 1) }).ok).toBe(true)
   })
 })
+
+describe('contrabloqueo del Ingeniero a la Nómina', () => {
+  /** a pide Nómina, b bloquea como RH y nadie desafía: a puede contrabloquear. */
+  function nominaBloqueada(manos: Record<string, Rol[]>) {
+    let e = escenario(3, manos)
+    e = paso(e, { tipo: 'elegirAccion', jugador: 'a', accion: 'nomina' })
+    e = paso(e, { tipo: 'bloquear', jugador: 'b', rol: 'rh' })
+    e = paso(e, { tipo: 'pasar', jugador: 'a' })
+    e = paso(e, { tipo: 'pasar', jugador: 'c' })
+    return e
+  }
+
+  it('tras un bloqueo de RH sostenido, solo el actor decide si contrabloquea', () => {
+    const e = nominaBloqueada({})
+    expect(e.fase).toMatchObject({ tipo: 'ventanaBloqueo', contra: true, pendientes: ['a'] })
+    expect(aplicar(e, { tipo: 'bloquear', jugador: 'a', rol: 'rh' }).ok).toBe(false) // solo Ingeniero normal
+    expect(aplicar(e, { tipo: 'bloquear', jugador: 'a', rol: 'ingeniero', especial: true }).ok).toBe(false)
+    expect(aplicar(e, { tipo: 'bloquear', jugador: 'b', rol: 'ingeniero' }).ok).toBe(false)
+  })
+
+  it('si el actor no contrabloquea, la Nómina se queda cancelada', () => {
+    let e = nominaBloqueada({})
+    e = paso(e, { tipo: 'pasar', jugador: 'a' })
+    expect(j(e, 'a').creditos).toBe(2)
+    expect(e.jugadorActivo).toBe('b')
+  })
+
+  it('un contrabloqueo que nadie desafía anula el bloqueo: cobra la Nómina', () => {
+    let e = nominaBloqueada({})
+    e = paso(e, { tipo: 'bloquear', jugador: 'a', rol: 'ingeniero' })
+    expect(e.fase).toMatchObject({ tipo: 'ventanaDesafioBloqueo', bloqueo: { contra: true } })
+    e = paso(e, { tipo: 'pasar', jugador: 'b' })
+    e = paso(e, { tipo: 'pasar', jugador: 'c' })
+    expect(j(e, 'a').creditos).toBe(4)
+    expect(e.jugadorActivo).toBe('b')
+  })
+
+  it('contrabloqueo desafiado con Ingeniero real: el desafiante pierde carta y cobra la Nómina', () => {
+    let e = nominaBloqueada({ a: ['ingeniero', 'ceo'] })
+    e = paso(e, { tipo: 'bloquear', jugador: 'a', rol: 'ingeniero' })
+    e = paso(e, { tipo: 'desafiar', jugador: 'c' })
+    e = paso(e, { tipo: 'revelarCarta', jugador: 'a', cartaId: carta(e, 'a', 0) })
+    e = paso(e, { tipo: 'elegirCartaAPerder', jugador: 'c', cartaId: carta(e, 'c', 0) })
+    expect(vivas(e, 'c')).toBe(1)
+    expect(j(e, 'a').creditos).toBe(4)
+  })
+
+  it('contrabloqueo desafiado y farol: el actor pierde carta y la Nómina sigue bloqueada', () => {
+    let e = nominaBloqueada({ a: ['ceo', 'ceo'] })
+    e = paso(e, { tipo: 'bloquear', jugador: 'a', rol: 'ingeniero' })
+    e = paso(e, { tipo: 'desafiar', jugador: 'c' })
+    e = paso(e, { tipo: 'revelarCarta', jugador: 'a', cartaId: carta(e, 'a', 0) })
+    expect(vivas(e, 'a')).toBe(1)
+    expect(j(e, 'a').creditos).toBe(2)
+    expect(e.jugadorActivo).toBe('b')
+  })
+
+  it('si RH mentía y pierde el desafío, la Nómina procede sin contrabloqueo', () => {
+    let e = escenario(3, { b: ['ceo', 'ceo'] })
+    e = paso(e, { tipo: 'elegirAccion', jugador: 'a', accion: 'nomina' })
+    e = paso(e, { tipo: 'bloquear', jugador: 'b', rol: 'rh' })
+    e = paso(e, { tipo: 'desafiar', jugador: 'c' })
+    e = paso(e, { tipo: 'revelarCarta', jugador: 'b', cartaId: carta(e, 'b', 0) })
+    expect(j(e, 'a').creditos).toBe(4)
+  })
+})

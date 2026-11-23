@@ -74,7 +74,7 @@ export interface Accion {
  */
 export type Reaccion =
   | { tipo: 'explosion'; jugador: string }
-  | { tipo: 'salvacion'; jugador: string; origen: 'accion' | 'bloqueo' }
+  | { tipo: 'salvacion'; jugador: string; origen: 'accion' | 'bloqueo' | 'contrabloqueo' }
 
 /** Qué ocurre cuando termina de resolverse una pérdida de carta. */
 export type Continuacion =
@@ -84,6 +84,8 @@ export type Continuacion =
   /** El bloqueo era un farol: la acción se resuelve. */
   | { tipo: 'resolverAccion'; accion: Accion }
   | { tipo: 'cancelarAccion'; accion: Accion; reembolso: boolean }
+  /** El bloqueo se sostuvo: la acción se cancela, salvo que el actor pueda contrabloquear (Nómina). */
+  | { tipo: 'bloqueoSostenido'; accion: Accion }
   /**
    * La Demanda, el Despido o la Renuncia cae sobre el objetivo (sin más reacciones). Si
    * `reciclarIngeniero`, tras perder su carta el Ingeniero devuelve el resto
@@ -103,11 +105,12 @@ export type Fase =
    * objetivo de un ataque también puede «explotar el site» desde aquí (a la vez que
    * decide si alega un bloqueo); si pasa, el ataque cae sin más ventanas.
    */
-  | { tipo: 'ventanaBloqueo'; accion: Accion; pendientes: string[]; explosion: boolean }
+  | { tipo: 'ventanaBloqueo'; accion: Accion; pendientes: string[]; explosion: boolean; contra?: boolean }
   | {
       tipo: 'ventanaDesafioBloqueo'
       accion: Accion
-      bloqueo: { jugador: string; rol: Rol; especial: boolean }
+      /** `contra`: es el contrabloqueo del actor (Ingeniero) contra el bloqueo de RH a su Nómina. */
+      bloqueo: { jugador: string; rol: Rol; especial: boolean; contra?: boolean }
       pendientes: string[]
     }
   /** El objetivo de una Demanda, un Despido o una Renuncia puede «explotar el site» (Ingeniero Especial). */
@@ -125,7 +128,7 @@ export type Fase =
       desafiante: string
       rol: Rol
       especial: boolean
-      origen: 'accion' | 'bloqueo' | 'reaccion'
+      origen: 'accion' | 'bloqueo' | 'contrabloqueo' | 'reaccion'
       /** Solo cuando `origen` es 'reaccion' (la explosión; la salvación se resuelve sola). */
       reaccion?: Reaccion
     }
@@ -204,7 +207,7 @@ export type EventoJuego =
   | { tipo: 'cartaMostrada'; jugador: string; rol: Rol; especial: boolean }
   | { tipo: 'desafioResuelto'; acusado: string; desafiante: string; acusadoTeniaRol: boolean }
   | { tipo: 'cartaIntercambiada'; jugador: string }
-  | { tipo: 'bloqueoDeclarado'; bloqueador: string; rol: Rol; especial: boolean }
+  | { tipo: 'bloqueoDeclarado'; bloqueador: string; rol: Rol; especial: boolean; contra?: boolean }
   | { tipo: 'cartaPerdida'; jugador: string; rol: Rol; especial: boolean }
   | { tipo: 'siteExplotado'; jugador: string; pago: number }
   | { tipo: 'salvacionDeclarada'; jugador: string }

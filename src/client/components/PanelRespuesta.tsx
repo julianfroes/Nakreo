@@ -1,5 +1,5 @@
 import type { EstadoProyectado } from '../../game/proyeccion'
-import { reclamoDeAccion } from '../../game/roles'
+import { ACCIONES, reclamoDeAccion } from '../../game/roles'
 import { Button } from '../../shared/components/Button'
 import type { IntencionCliente } from '../../shared/protocolo'
 import { EtiquetaRol, IconoRol } from '../../shared/iconos/IconoRol'
@@ -64,7 +64,11 @@ export function PanelRespuesta({ p, vista, pendiente, enviar }: Props) {
   if (vista.tipo === 'responderBloqueo') {
     return (
       <div className="space-y-2 animate-entrada">
-        <p className="text-center">{describirAccion(vista.accion, nombre)}</p>
+        <p className="text-center">
+          {vista.contra
+            ? `RH bloqueó tu ${ACCIONES[vista.accion.tipo].titulo}. ¿Contrabloqueas?`
+            : describirAccion(vista.accion, nombre)}
+        </p>
         {/* Todas las reacciones posibles, a la vez y sin menús intermedios. */}
         {vista.roles.map((r) => (
           <Button

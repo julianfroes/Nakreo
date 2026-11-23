@@ -240,6 +240,7 @@ export function seccionesReglas(especiales = true): SeccionReglas[] {
       titulo: 'Bloqueos',
       puntos: [
         'Algunas acciones se pueden bloquear alegando un rol (columna «Bloqueable por» de la tabla): «Alegar Sindicalizado», «Alegar RH»… No hace falta tener la carta, pero si te desafían debes mostrarla. El bloqueo también se puede desafiar.',
+        'Contrabloqueo: si RH bloquea tu Nómina y el bloqueo se sostiene, puedes alegar «Ingeniero» (aunque no lo tengas) para anular el bloqueo y cobrar. Solo lo hace quien pidió la Nómina, y también se puede desafiar: si te descubren, pierdes una carta y la Nómina queda bloqueada.',
         'El Ingeniero normal no puede bloquear el Despido, ni siquiera siendo su objetivo: lo bloquea el Sindicalizado. La Demanda laboral y la Renuncia «voluntaria» solo las frena la Contrademanda del Sindicalizado Especial.',
         ...(especiales
           ? [

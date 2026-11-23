@@ -173,10 +173,12 @@ function perderPorFarol(
 }
 
 /** Qué ocurre cuando un farol de acción o de bloqueo queda al descubierto. */
-const continuacionFallo = (origen: 'accion' | 'bloqueo', accion: Accion): Continuacion =>
+const continuacionFallo = (origen: 'accion' | 'bloqueo' | 'contrabloqueo', accion: Accion): Continuacion =>
   origen === 'accion'
     ? { tipo: 'cancelarAccion', accion, reembolso: true } // farol: acción cancelada
-    : { tipo: 'resolverAccion', accion } // bloqueo falso: la acción procede
+    : origen === 'bloqueo'
+      ? { tipo: 'resolverAccion', accion } // bloqueo falso: la acción procede
+      : { tipo: 'cancelarAccion', accion, reembolso: false } // contrabloqueo falso: el bloqueo se sostiene
 
 /** Qué ocurre si el acusado pierde el desafío, según qué se desafió. */
 function continuacionDerrota(f: Extract<Fase, { tipo: 'revelacion' }>): Continuacion {
@@ -198,6 +200,8 @@ function continuar(ctx: Ctx, c: Continuacion): void {
       return resolver(ctx, c.accion)
     case 'cancelarAccion':
       return cancelar(ctx, c.accion, c.reembolso)
+    case 'bloqueoSostenido':
+      return bloqueoSostenido(ctx, c.accion)
     case 'efectoDirecto':
       return efectoDirecto(ctx, c.accion, c.reciclarIngeniero)
     case 'explosion':
@@ -229,6 +233,16 @@ function cancelar(ctx: Ctx, accion: Accion, reembolso: boolean) {
   ctx.eventos.push({ tipo: 'accionCancelada', accion })
   if (reembolso && !actor.eliminado) cambiarCreditos(ctx, actor, ACCIONES[accion.tipo].coste)
   finTurno(ctx)
+}
+
+/**
+ * Un bloqueo se sostuvo (sin desafío o tras ganarlo). Si la acción admite contrabloqueo
+ * (Nómina), el actor decide si alega Ingeniero; si no, la acción se cancela.
+ */
+function bloqueoSostenido(ctx: Ctx, accion: Accion) {
+  const actor = jugadorPorId(ctx.estado, accion.actor)
+  if (!ACCIONES[accion.tipo].contrabloqueo || actor.eliminado) return cancelar(ctx, accion, false)
+  ctx.estado.fase = { tipo: 'ventanaBloqueo', accion, pendientes: [actor.id], explosion: false, contra: true }
 }
 
 /**
@@ -421,7 +435,7 @@ function desafiar(ctx: Ctx, i: Extract<Intencion, { tipo: 'desafiar' }>) {
     const { rol, especial } = f.bloqueo
     estado.fase = {
       tipo: 'revelacion', accion: f.accion, acusado: f.bloqueo.jugador,
-      desafiante: i.jugador, rol, especial, origen: 'bloqueo',
+      desafiante: i.jugador, rol, especial, origen: f.bloqueo.contra ? 'contrabloqueo' : 'bloqueo',
     }
     eventos.push({
       tipo: 'desafioLanzado', desafiante: i.jugador, acusado: f.bloqueo.jugador, rol, especial,
@@ -453,15 +467,17 @@ function bloquear(ctx: Ctx, i: Extract<Intencion, { tipo: 'bloquear' }>) {
   if (f.tipo !== 'ventanaBloqueo') return fallar('faseIncorrecta', 'No es momento de bloquear')
   exigirPendiente(f.pendientes, i.jugador)
   const especial = !!i.especial
-  const permitido = bloqueosVigentes(f.accion.tipo, estado.especiales).some(
+  const contra = ACCIONES[f.accion.tipo].contrabloqueo
+  const permitidos = f.contra ? (contra ? [contra] : []) : bloqueosVigentes(f.accion.tipo, estado.especiales)
+  const permitido = permitidos.some(
     (r) => r.rol === i.rol && r.especial === especial,
   )
   if (!permitido) return fallar('bloqueoInvalido', 'Ese rol no puede bloquear esta acción')
-  eventos.push({ tipo: 'bloqueoDeclarado', bloqueador: i.jugador, rol: i.rol, especial })
+  eventos.push({ tipo: 'bloqueoDeclarado', bloqueador: i.jugador, rol: i.rol, especial, ...(f.contra ? { contra: true } : {}) })
   estado.fase = {
     tipo: 'ventanaDesafioBloqueo',
     accion: f.accion,
-    bloqueo: { jugador: i.jugador, rol: i.rol, especial },
+    bloqueo: { jugador: i.jugador, rol: i.rol, especial, ...(f.contra ? { contra: true } : {}) },
     // Cualquiera salvo el bloqueador (incluido el actor) puede desafiar el bloqueo.
     pendientes: otrosVivos(estado, i.jugador),
   }
@@ -485,6 +501,8 @@ function cerrarVentana(ctx: Ctx, f: VentanaConPendientes): void {
     case 'ventanaDesafioAccion':
       return etapaBloqueo(ctx, f.accion)
     case 'ventanaBloqueo':
+      // Sin contrabloqueo del actor, el bloqueo de RH se sostiene.
+      if (f.contra) return cancelar(ctx, f.accion, false)
       // Si la ventana ya ofrecía «explotar el site», pasar es pasar de todo: el ataque cae sin más ventanas.
       return f.explosion ? efectoDirecto(ctx, f.accion, false) : resolver(ctx, f.accion)
     case 'ventanaIngeniero':
@@ -494,8 +512,9 @@ function cerrarVentana(ctx: Ctx, f: VentanaConPendientes): void {
     case 'ventanaDesafioBloqueo':
       // El bloqueo se sostiene sin desafío. Si usó la carta de un solo uso
       // (Sindicalizado Especial), la devuelve al mazo con el resto de su mano.
+      if (f.bloqueo.contra) return resolver(ctx, f.accion) // contrabloqueo sostenido: la acción procede
       if (f.bloqueo.especial) renovarMano(ctx, f.bloqueo.jugador)
-      return cancelar(ctx, f.accion, false) // el coste NO se devuelve
+      return bloqueoSostenido(ctx, f.accion) // el coste NO se devuelve
   }
 }
 
@@ -625,7 +644,8 @@ function revelarCarta(ctx: Ctx, i: Extract<Intencion, { tipo: 'revelarCarta' }>)
 
     let cont: Continuacion
     if (f.origen === 'accion') cont = { tipo: 'seguirAccion', accion: f.accion }
-    else if (f.origen === 'bloqueo') cont = { tipo: 'cancelarAccion', accion: f.accion, reembolso: false } // el bloqueo se sostiene
+    else if (f.origen === 'bloqueo') cont = { tipo: 'bloqueoSostenido', accion: f.accion } // el bloqueo se sostiene
+    else if (f.origen === 'contrabloqueo') cont = { tipo: 'resolverAccion', accion: f.accion } // el contrabloqueo anula el bloqueo
     else cont = { tipo: 'explosion', accion: f.accion, usoUnico: false }
     perderCarta(ctx, f.desafiante, cont, penalizacion(reclamo))
     return
@@ -709,6 +729,7 @@ function sinJugador(c: Continuacion, id: string): Continuacion {
   switch (c.tipo) {
     case 'seguirAccion':
     case 'resolverAccion':
+    case 'bloqueoSostenido':
     case 'efectoDirecto':
     case 'explosion':
       return participa(c.accion, id)
@@ -767,7 +788,9 @@ function salir(ctx: Ctx, i: Extract<Intencion, { tipo: 'salir' }>) {
       return
     case 'ventanaDesafioBloqueo':
       // Se fue quien bloqueaba: no hay bloqueo y la acción procede (si él era el objetivo, se desvanece).
-      if (fase.bloqueo.jugador === id) return resolver(ctx, fase.accion)
+      if (fase.bloqueo.jugador === id) {
+        return fase.bloqueo.contra ? cancelar(ctx, fase.accion, false) : resolver(ctx, fase.accion)
+      }
       if (participa(fase.accion, id)) return cancelar(ctx, fase.accion, false)
       if (quitarPendiente(fase, id)) cerrarVentana(ctx, fase)
       return
@@ -794,8 +817,10 @@ function salir(ctx: Ctx, i: Extract<Intencion, { tipo: 'salir' }>) {
           fase.origen === 'accion'
             ? { tipo: 'seguirAccion', accion: fase.accion }
             : fase.origen === 'bloqueo'
-              ? { tipo: 'cancelarAccion', accion: fase.accion, reembolso: false }
-              : { tipo: 'explosion', accion: fase.accion, usoUnico: false },
+              ? { tipo: 'bloqueoSostenido', accion: fase.accion }
+              : fase.origen === 'contrabloqueo'
+                ? { tipo: 'resolverAccion', accion: fase.accion }
+                : { tipo: 'explosion', accion: fase.accion, usoUnico: false },
         )
       }
       return

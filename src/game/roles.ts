@@ -58,6 +58,8 @@ export interface DefinicionAccion {
   bloqueablePor: Reclamo[]
   /** true = solo el objetivo puede bloquear; false = cualquiera. */
   soloObjetivoBloquea: boolean
+  /** Si un bloqueo se sostiene, el actor puede contrabloquear alegando este rol (se puede desafiar). */
+  contrabloqueo?: Reclamo
 }
 
 const R = (rol: Rol, especial = false): Reclamo => ({ rol, especial })
@@ -74,6 +76,8 @@ export const ACCIONES: Record<TipoAccion, DefinicionAccion> = {
     nombre: `Nómina (+${GANANCIA_NOMINA})`,
     coste: 0, rolRequerido: null, especial: false, necesitaObjetivo: false, ataque: false, generaCreditos: true,
     bloqueablePor: [R('rh')], soloObjetivoBloquea: false,
+    // El Ingeniero (normal) del que pidió la Nómina anula el bloqueo de RH.
+    contrabloqueo: R('ingeniero'),
   },
   demandaLaboral: {
     titulo: 'Demanda laboral',
