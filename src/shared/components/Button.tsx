@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from 'react'
+import type { ComponentProps } from 'react'
 
 type Variant = 'primary' | 'secondary' | 'danger'
 
@@ -8,7 +8,8 @@ const styles: Record<Variant, string> = {
   danger: 'bg-rose-600 text-white hover:bg-rose-500 active:bg-rose-400',
 }
 
-interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
+/** Incluye `ref` (React 19 lo pasa como una propiedad más). */
+interface Props extends ComponentProps<'button'> {
   variant?: Variant
 }
 

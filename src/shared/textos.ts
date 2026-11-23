@@ -1,6 +1,6 @@
 /** Textos en español para registro y estado. Solo usan información pública. */
 import type { EstadoPublico } from '../game/proyeccion'
-import { ACCIONES, ROLES } from '../game/roles'
+import { ACCIONES, nombreReclamo } from '../game/roles'
 import type { Accion, EventoJuego } from '../game/types'
 
 type Nombre = (id: string) => string
@@ -22,9 +22,9 @@ export function textoEvento(ev: EventoJuego, n: Nombre): string {
     case 'creditosCambiados':
       return `${n(ev.jugador)} ${ev.delta > 0 ? '+' : ''}${ev.delta} créditos`
     case 'desafioLanzado':
-      return `${n(ev.desafiante)} acusó a ${n(ev.acusado)} de ser ${ROLES[ev.rol].nombre}`
+      return `${n(ev.desafiante)} acusó a ${n(ev.acusado)} de ser ${nombreReclamo(ev)}`
     case 'cartaMostrada':
-      return `${n(ev.jugador)} muestra ${ROLES[ev.rol].nombre}`
+      return `${n(ev.jugador)} muestra ${nombreReclamo(ev)}`
     case 'desafioResuelto':
       return ev.acusadoTeniaRol
         ? `${n(ev.acusado)} decía la verdad`
@@ -32,11 +32,19 @@ export function textoEvento(ev: EventoJuego, n: Nombre): string {
     case 'cartaIntercambiada':
       return `${n(ev.jugador)} cambia su carta por una del mazo`
     case 'bloqueoDeclarado':
-      return `${n(ev.bloqueador)} bloquea como ${ROLES[ev.rol].nombre}`
+      return `${n(ev.bloqueador)} bloquea como ${nombreReclamo(ev)}`
     case 'cartaPerdida':
-      return `${n(ev.jugador)} pierde ${ROLES[ev.rol].nombre}`
+      return `${n(ev.jugador)} pierde ${nombreReclamo(ev)}`
     case 'jugadorEliminado':
       return `${n(ev.jugador)} ha sido eliminado`
+    case 'jugadorRetirado':
+      return `${n(ev.jugador)} abandonó la partida`
+    case 'siteExplotado':
+      return `${n(ev.jugador)} paga ${ev.pago} y declara: ¡explotar el site! (Ingeniero Especial)`
+    case 'salvacionDeclarada':
+      return `${n(ev.jugador)} usa la Excusa de mérito (Jefe de Área Especial)`
+    case 'manoRenovada':
+      return `${n(ev.jugador)} devuelve sus cartas al mazo y roba nuevas`
     case 'reasignacionRealizada':
       return `${n(ev.jugador)} reasigna sus cartas`
     case 'accionCancelada':
@@ -44,6 +52,20 @@ export function textoEvento(ev: EventoJuego, n: Nombre): string {
     case 'partidaTerminada':
       return `¡${n(ev.ganador)} gana la partida!`
   }
+}
+
+/** Color con el que se resalta un evento en los registros (mesa y panel del jugador). */
+export function colorEvento(tipo: EventoJuego['tipo']): string {
+  if (
+    tipo === 'desafioLanzado' ||
+    tipo === 'cartaPerdida' ||
+    tipo === 'jugadorEliminado' ||
+    tipo === 'jugadorRetirado'
+  ) {
+    return 'text-rose-300'
+  }
+  if (tipo === 'partidaTerminada' || tipo === 'turnoIniciado') return 'text-cyan-300'
+  return 'text-slate-300'
 }
 
 /** Frase que resume qué está pasando en la mesa según la fase. */
@@ -61,9 +83,15 @@ export function describirFase(
     case 'ventanaBloqueo':
       return `${describirAccion(f.accion, n)}. ¿Alguien bloquea? Esperando a ${lista(f.pendientes)}`
     case 'ventanaDesafioBloqueo':
-      return `${n(f.bloqueo.jugador)} bloquea como ${ROLES[f.bloqueo.rol].nombre}. ¿Alguien desafía? Esperando a ${lista(f.pendientes)}`
+      return `${n(f.bloqueo.jugador)} bloquea como ${nombreReclamo(f.bloqueo)}. ¿Alguien desafía? Esperando a ${lista(f.pendientes)}`
     case 'revelacion':
-      return `${n(f.acusado)} debe probar que es ${ROLES[f.rol].nombre}`
+      return `${n(f.acusado)} debe probar que es ${nombreReclamo(f)}`
+    case 'ventanaIngeniero':
+      return `${describirAccion(f.accion, n)}. ${n(f.pendientes[0])} decide si explota el site`
+    case 'ventanaDesafioReaccion':
+      return f.reaccion.tipo === 'explosion'
+        ? `${n(f.reaccion.jugador)} declara Ingeniero Especial. ¿Alguien desafía? Esperando a ${lista(f.pendientes)}`
+        : `${n(f.reaccion.jugador)} usa la Excusa de mérito (Jefe de Área Especial). ¿Alguien desafía? Esperando a ${lista(f.pendientes)}`
     case 'perdiendoCarta':
       return `${n(f.jugador)} elige qué carta perder`
     case 'reasignando':

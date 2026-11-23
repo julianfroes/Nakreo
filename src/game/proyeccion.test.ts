@@ -4,10 +4,10 @@ import { proyectarEstado, proyectarPublico } from './proyeccion'
 import { crearRng, type Rng } from './rng'
 import { ACCIONES } from './roles'
 import { crearPartida } from './setup'
-import type { EstadoJuego, Intencion, Rol, TipoAccion } from './types'
+import type { EstadoJuego, Intencion, TipoAccion } from './types'
 
 const ids = (n: number) =>
-  Array.from({ length: n }, (_, k) => ({ id: 'abcdef'[k], nombre: `J${k}` }))
+  Array.from({ length: n }, (_, k) => ({ id: 'abcdefgh'[k], nombre: `J${k}` }))
 
 /** Ids de cartas físicas que `observador` NO debe poder ver en ningún punto. */
 function idsOcultos(e: EstadoJuego, observador: string): Set<number> {
@@ -47,15 +47,17 @@ function verificarSeguridad(e: EstadoJuego) {
 
     // 2. Estructura exacta: no hay campos extra (p. ej. `mazo` o `cartas`).
     expect(Object.keys(p).sort()).toEqual(
-      ['fase', 'jugadorActivo', 'jugadores', 'mazoRestante', 'registro', 'turno', 'yo'],
+      ['especiales', 'fase', 'jugadorActivo', 'jugadores', 'mazoRestante', 'registro', 'turno', 'yo'],
     )
     for (const jp of p.jugadores) {
       expect(Object.keys(jp).sort()).toEqual(
-        ['cartasReveladas', 'cartasVivas', 'creditos', 'eliminado', 'id', 'nombre'],
+        ['cartasReveladas', 'cartasVivas', 'creditos', 'eliminado', 'id', 'nombre', 'retirado'],
       )
       const real = e.jugadores.find((j) => j.id === jp.id)!
       // Solo el rol de las cartas ya perdidas; de las vivas, solo la cantidad.
-      expect(jp.cartasReveladas).toEqual(real.cartas.filter((c) => c.revelada).map((c) => c.rol))
+      expect(jp.cartasReveladas).toEqual(
+      real.cartas.filter((c) => c.revelada).map((c) => ({ rol: c.rol, especial: !!c.especial })),
+    )
       expect(jp.cartasVivas).toBe(real.cartas.filter((c) => !c.revelada).length)
     }
 
@@ -70,8 +72,8 @@ function verificarSeguridad(e: EstadoJuego) {
     // 4b. (se comprueba la vista pública una vez, tras el bucle)
     // 5. Sin referencias compartidas con el estado del host.
     const antes = JSON.stringify(e)
-    p.yo.mano.forEach((c) => (c.rol = 'saboteador'))
-    p.jugadores.forEach((j) => j.cartasReveladas.push('saboteador'))
+    p.yo.mano.forEach((c) => (c.rol = 'ceo'))
+    p.jugadores.forEach((j) => j.cartasReveladas.push({ rol: 'ceo', especial: false }))
     p.registro.push({ tipo: 'partidaTerminada', ganador: 'x' })
     expect(JSON.stringify(e)).toBe(antes)
   }
@@ -80,22 +82,24 @@ function verificarSeguridad(e: EstadoJuego) {
 /** La vista pública (pantalla del host) no debe contener NINGUNA carta con id ni mano. */
 function verificarPublico(e: EstadoJuego) {
   const p = proyectarPublico(e)
-  expect(Object.keys(p).sort()).toEqual(['fase', 'jugadorActivo', 'jugadores', 'mazoRestante', 'registro', 'turno'])
+  expect(Object.keys(p).sort()).toEqual(['especiales', 'fase', 'jugadorActivo', 'jugadores', 'mazoRestante', 'registro', 'turno'])
   expect(idsDeCartasEn(p).size).toBe(0) // ni manos, ni mazo, ni cartas robadas
   for (const jp of p.jugadores) {
     const real = e.jugadores.find((j) => j.id === jp.id)!
-    expect(jp.cartasReveladas).toEqual(real.cartas.filter((c) => c.revelada).map((c) => c.rol))
+    expect(jp.cartasReveladas).toEqual(
+      real.cartas.filter((c) => c.revelada).map((c) => ({ rol: c.rol, especial: !!c.especial })),
+    )
     expect(jp.cartasVivas).toBe(real.cartas.filter((c) => !c.revelada).length)
   }
   if (p.fase.tipo === 'reasignando') expect('robadas' in p.fase).toBe(false)
   const antes = JSON.stringify(e)
   p.registro.push({ tipo: 'partidaTerminada', ganador: 'x' })
-  p.jugadores.forEach((j) => j.cartasReveladas.push('saboteador'))
+  p.jugadores.forEach((j) => j.cartasReveladas.push({ rol: 'ceo', especial: false }))
   expect(JSON.stringify(e)).toBe(antes)
 }
 
 describe('proyectarEstado', () => {
-  it.each([2, 3, 4, 5, 6])('partida inicial de %i jugadores: sin fugas', (n) => {
+  it.each([2, 3, 4, 5, 6, 7, 8])('partida inicial de %i jugadores: sin fugas', (n) => {
     verificarSeguridad(crearPartida(ids(n), crearRng(n)))
   })
 
@@ -104,7 +108,7 @@ describe('proyectarEstado', () => {
     const p = proyectarEstado(e, 'b')
     expect(p.yo.mano).toEqual(e.jugadores[1].cartas)
     expect(p.jugadores.find((j) => j.id === 'a')).toEqual({
-      id: 'a', nombre: 'J0', creditos: 2, eliminado: false, cartasVivas: 2, cartasReveladas: [],
+      id: 'a', nombre: 'J0', creditos: 2, eliminado: false, retirado: false, cartasVivas: 2, cartasReveladas: [],
     })
     expect(p.mazoRestante).toBe(e.mazo.length)
   })
@@ -114,14 +118,14 @@ describe('proyectarEstado', () => {
     e.jugadores[0].cartas[0].revelada = true
     const p = proyectarEstado(e, 'c')
     const a = p.jugadores.find((j) => j.id === 'a')!
-    expect(a.cartasReveladas).toEqual([e.jugadores[0].cartas[0].rol])
+    expect(a.cartasReveladas).toEqual([{ rol: e.jugadores[0].cartas[0].rol, especial: false }])
     expect(a.cartasVivas).toBe(1)
     verificarSeguridad(e)
   })
 
   it('el registro público incluye eventos pero ningún id de carta oculta', () => {
     let e = crearPartida(ids(3), crearRng(5))
-    const r = aplicar(e, { tipo: 'elegirAccion', jugador: 'a', accion: 'ingreso' })
+    const r = aplicar(e, { tipo: 'elegirAccion', jugador: 'a', accion: 'sueldoMinimo' })
     if (!r.ok) throw new Error('ilegal')
     e = r.estado
     expect(proyectarEstado(e, 'b').registro).toEqual(e.registro)
@@ -179,14 +183,21 @@ function intencionesCandidatas(e: EstadoJuego, rng: Rng): Intencion[] {
     case 'ventanaDesafioAccion':
     case 'ventanaBloqueo':
     case 'ventanaDesafioBloqueo':
+    case 'ventanaIngeniero':
+    case 'ventanaDesafioReaccion':
       for (const jugador of f.pendientes) {
-        out.push({ tipo: 'pasar', jugador }, { tipo: 'desafiar', jugador })
-        const roles: Rol[] = f.tipo === 'ventanaBloqueo' ? ACCIONES[f.accion.tipo].bloqueablePor : []
-        for (const rol of roles) out.push({ tipo: 'bloquear', jugador, rol })
+        out.push({ tipo: 'pasar', jugador })
+        if (f.tipo !== 'ventanaIngeniero') out.push({ tipo: 'desafiar', jugador })
+        else out.push({ tipo: 'explotarSite', jugador })
+        // El objetivo de un ataque también puede explotar el site desde la ventana de bloqueo.
+        if (f.tipo === 'ventanaBloqueo' && f.explosion) out.push({ tipo: 'explotarSite', jugador })
+        const reclamos = f.tipo === 'ventanaBloqueo' ? ACCIONES[f.accion.tipo].bloqueablePor : []
+        for (const r of reclamos) out.push({ tipo: 'bloquear', jugador, rol: r.rol, especial: r.especial })
       }
       break
     case 'revelacion': {
       const a = e.jugadores.find((j) => j.id === f.acusado)!
+      if (f.origen !== 'reaccion') out.push({ tipo: 'salvarse', jugador: a.id })
       for (const c of a.cartas) {
         if (c.revelada) continue
         out.push({ tipo: 'revelarCarta', jugador: a.id, cartaId: c.id })
@@ -214,19 +225,45 @@ function intencionesCandidatas(e: EstadoJuego, rng: Rng): Intencion[] {
   return out
 }
 
-function simular(n: number, semilla: number, pasosMax: number) {
+/** Fases que solo existen con roles especiales. */
+const FASES_ESPECIALES = ['ventanaIngeniero', 'ventanaDesafioReaccion']
+
+/** Total de abandonos simulados (para comprobar que el fuzz los ejercita). */
+let salidas = 0
+
+function simular(n: number, semilla: number, pasosMax: number, especiales = true) {
   const rng: Rng = crearRng(semilla)
-  let e = crearPartida(ids(n), rng)
+  let e = crearPartida(ids(n), rng, { especiales })
   let terminada = false
   for (let paso = 0; paso < pasosMax && e.fase.tipo !== 'fin'; paso++) {
     verificarSeguridad(e)
+    if (!especiales) {
+      // Sin roles especiales: ninguna carta especial, ninguna fase especial y el modo es público.
+      const cartas = [...e.mazo, ...e.jugadores.flatMap((x) => x.cartas)]
+      expect(cartas.some((c) => c.especial)).toBe(false)
+      expect(FASES_ESPECIALES).not.toContain(e.fase.tipo)
+      if (e.fase.tipo === 'ventanaBloqueo') expect(e.fase.explosion).toBe(false)
+      expect(proyectarEstado(e, e.jugadorActivo).especiales).toBe(false)
+      expect(proyectarPublico(e).especiales).toBe(false)
+    }
     const legales: { estado: EstadoJuego }[] = []
     for (const i of intencionesCandidatas(e, rng)) {
       const r = aplicar(e, i, rng)
       if (r.ok) legales.push({ estado: r.estado })
     }
+    // Sin contar «salir» (siempre es legal), debe haber alguna jugada: si no, la partida quedó atascada.
     if (legales.length === 0) throw new Error(`Sin movimientos legales en fase ${e.fase.tipo}`)
     e = legales[Math.floor(rng() * legales.length)].estado
+    // De vez en cuando alguien abandona, en cualquier fase.
+    if (e.fase.tipo !== 'fin' && rng() < 0.04) {
+      const vivos = e.jugadores.filter((x) => !x.eliminado)
+      const quien = vivos[Math.floor(rng() * vivos.length)]
+      const r = aplicar(e, { tipo: 'salir', jugador: quien.id }, rng)
+      if (!r.ok) throw new Error(`«salir» debería ser legal: ${r.error.mensaje}`)
+      e = r.estado
+      salidas++
+      expect(e.jugadores.find((x) => x.id === quien.id)).toMatchObject({ retirado: true, eliminado: true })
+    }
   }
   verificarSeguridad(e)
   terminada = e.fase.tipo === 'fin'
@@ -234,10 +271,24 @@ function simular(n: number, semilla: number, pasosMax: number) {
 }
 
 describe('fuzz: partidas aleatorias sin fugas en ningún paso', () => {
-  it.each([2, 3, 4, 5, 6])('%i jugadores', (n) => {
+  it.each([2, 3, 4, 5, 6, 7, 8])('%i jugadores', (n) => {
     let terminadas = 0
     for (let s = 1; s <= 6; s++) if (simular(n, s * 100 + n, 400)) terminadas++
     // Al menos algunas partidas deben llegar al final para que el fuzz explore bien.
     expect(terminadas).toBeGreaterThan(0)
+  })
+})
+
+describe('fuzz: modo sin roles especiales', () => {
+  it.each([2, 3, 4, 5, 6])('%i jugadores', (n) => {
+    let terminadas = 0
+    for (let s = 1; s <= 6; s++) if (simular(n, s * 100 + n, 400, false)) terminadas++
+    expect(terminadas).toBeGreaterThan(0)
+  })
+})
+
+describe('fuzz: abandonos', () => {
+  it('las partidas simuladas incluyeron jugadores que se retiraron en distintas fases', () => {
+    expect(salidas).toBeGreaterThan(20)
   })
 })

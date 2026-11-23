@@ -20,7 +20,7 @@ export function Overlay({
       className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/95 p-4 backdrop-blur-sm"
     >
       <div
-        className={`mx-auto flex min-h-full max-w-md flex-col justify-center gap-4 animate-entrada ${
+        className={`mx-auto flex min-h-full max-w-md flex-col justify-center gap-4 animate-entrada lg:max-w-3xl ${
           alerta ? 'animate-sacudida' : ''
         }`}
       >

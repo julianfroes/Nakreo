@@ -20,6 +20,8 @@ export function detectarSenal(anterior: Vista | null, nueva: Vista): SenalFeedba
     case 'responderDesafio':
     case 'responderBloqueo':
     case 'responderDesafioBloqueo':
+    case 'responderDesafioReaccion':
+    case 'explotarSite':
     case 'perderCarta':
     case 'reasignar':
       return 'atencion'

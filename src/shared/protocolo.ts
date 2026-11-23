@@ -21,6 +21,8 @@ export const MAX_NOMBRE = 20
 
 export type MensajeCliente =
   | { tipo: 'unirse'; nombre: string; token: string }
+  /** Solo en el lobby: «estoy listo». Es una guía visual; no condiciona el inicio. */
+  | { tipo: 'listo'; listo: boolean }
   | { tipo: 'intencion'; intencion: IntencionCliente }
 
 // ------------------------------------------------------------ Host → Cliente
@@ -29,6 +31,18 @@ export interface JugadorSala {
   id: string
   nombre: string
   conectado: boolean
+  /** Ha marcado «estoy listo» (solo informativo; siempre false si está desconectado). */
+  listo: boolean
+}
+
+/** Lo que el host dice de la sala: jugadores, si empezó y el modo/aforo. */
+export interface SalaInfo {
+  jugadores: JugadorSala[]
+  iniciada: boolean
+  /** false = sin roles especiales. */
+  especiales: boolean
+  /** Aforo de la sala en este modo. */
+  max: number
 }
 
 export type CodigoErrorRed =
@@ -36,12 +50,18 @@ export type CodigoErrorRed =
   | 'mensajeInvalido'
   | 'salaLlena'
   | 'partidaEnCurso'
+  /** El anfitrión ya ocupa un asiento (solo puede tener uno). */
+  | 'yaTienesAsiento'
+  /** Abandonaste esta partida y no puedes volver a entrar en ella. */
+  | 'retirado'
   | 'sinPartida'
   | 'noUnido'
 
 export type MensajeHost =
   | { tipo: 'bienvenida'; idJugador: string }
-  | { tipo: 'sala'; jugadores: JugadorSala[]; iniciada: boolean }
+  /** El anfitrión cerró la sala: no hay a dónde reconectar. */
+  | { tipo: 'salaCerrada' }
+  | ({ tipo: 'sala' } & SalaInfo)
   | { tipo: 'estado'; proyeccion: EstadoProyectado; eventos: EventoJuego[] }
   | { tipo: 'error'; codigo: CodigoErrorRed; mensaje: string }
 
@@ -64,11 +84,19 @@ function parsearIntencion(x: unknown): IntencionCliente | null {
     }
     case 'desafiar':
       return { tipo: 'desafiar' }
+    case 'salir':
+      return { tipo: 'salir' }
     case 'pasar':
       return { tipo: 'pasar' }
     case 'bloquear':
       if (typeof x.rol !== 'string' || !(x.rol in ROLES)) return null
-      return { tipo: 'bloquear', rol: x.rol as Rol }
+      if (x.especial !== undefined && typeof x.especial !== 'boolean') return null
+      return x.especial === undefined
+        ? { tipo: 'bloquear', rol: x.rol as Rol }
+        : { tipo: 'bloquear', rol: x.rol as Rol, especial: x.especial }
+    case 'explotarSite':
+    case 'salvarse':
+      return { tipo: x.tipo }
     case 'revelarCarta':
     case 'rendirse':
     case 'elegirCartaAPerder':
@@ -93,6 +121,9 @@ export function parsearMensajeCliente(x: unknown): MensajeCliente | null {
     if (x.token.length < 8 || x.token.length > 64) return null
     return { tipo: 'unirse', nombre, token: x.token }
   }
+  if (x.tipo === 'listo') {
+    return typeof x.listo === 'boolean' ? { tipo: 'listo', listo: x.listo } : null
+  }
   if (x.tipo === 'intencion') {
     const intencion = parsearIntencion(x.intencion)
     return intencion ? { tipo: 'intencion', intencion } : null
@@ -109,8 +140,15 @@ export function parsearMensajeHost(x: unknown): MensajeHost | null {
   switch (x.tipo) {
     case 'bienvenida':
       return typeof x.idJugador === 'string' ? (x as MensajeHost) : null
+    case 'salaCerrada':
+      return { tipo: 'salaCerrada' }
     case 'sala':
-      return Array.isArray(x.jugadores) && typeof x.iniciada === 'boolean' ? (x as MensajeHost) : null
+      return Array.isArray(x.jugadores) &&
+        typeof x.iniciada === 'boolean' &&
+        typeof x.especiales === 'boolean' &&
+        esEntero(x.max)
+        ? (x as MensajeHost)
+        : null
     case 'estado':
       return esObj(x.proyeccion) && Array.isArray(x.eventos) ? (x as MensajeHost) : null
     case 'error':

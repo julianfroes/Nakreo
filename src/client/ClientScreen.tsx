@@ -15,7 +15,8 @@ export function ClientScreen() {
 
   useEffect(() => retomarSesion(room), [retomarSesion, room])
 
-  if (conexion === 'inicio') return <UnirseForm codigoInicial={room ?? ''} />
+  // `key`: si la ruta cambia de sala con el formulario ya abierto, se rehace con el código nuevo.
+  if (conexion === 'inicio') return <UnirseForm key={room ?? ''} codigoInicial={room ?? ''} />
   if (proyeccion) return <Juego p={proyeccion} />
   if (sala) return <Lobby />
   return (

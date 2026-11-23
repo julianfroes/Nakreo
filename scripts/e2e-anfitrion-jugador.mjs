@@ -44,22 +44,26 @@ try {
   await iniciar.waitFor()
   await anfitrion.waitForFunction(() => !document.querySelector('button:disabled')?.textContent?.includes('Iniciar'), null, { timeout: 15000 })
   await iniciar.click()
-  await anfitrion.getByText('Tus cartas').waitFor({ timeout: 15000 })
-  await invitado.getByText('Tus cartas').waitFor({ timeout: 15000 })
+  // Texto exacto: «Tus cartas» como subcadena también aparece en la descripción de la carta
+  // Ingeniero («Cambia tus cartas con el mazo…»), y depende del reparto aleatorio.
+  const encabezadoMano = (p) => p.getByText('Tus cartas (solo tú las ves)', { exact: true })
+  await encabezadoMano(anfitrion).waitFor({ timeout: 15000 })
+  await encabezadoMano(invitado).waitFor({ timeout: 15000 })
   comprobar(true, 'ambos ven sus cartas')
   await anfitrion.waitForTimeout(500)
   await anfitrion.screenshot({ path: 'capturas/e2e-anfitrion-jugando.png' })
   await invitado.screenshot({ path: 'capturas/e2e-invitado-jugando.png' })
 
   // 4. El anfitrión NO ve la mesa general (nada del panel de la mesa).
-  comprobar((await anfitrion.getByText('Registro').count()) === 0, 'el anfitrión-jugador no ve el registro/mesa general')
+  // «Cartas reveladas» solo existe en la mesa general (el registro lateral del jugador de ordenador no cuenta).
+  comprobar((await anfitrion.getByText(/Cartas reveladas \(/).count()) === 0, 'el anfitrión-jugador no ve la mesa general')
 
-  // 5. Quien tenga el turno juega Ingreso y el otro lo ve.
+  // 5. Quien tenga el turno juega Sueldo mínimo y el otro lo ve.
   const turnoAnfitrion = await anfitrion.getByText('¡Tu turno!').count()
   const [activo, otro] = turnoAnfitrion ? [anfitrion, invitado] : [invitado, anfitrion]
-  await activo.getByRole('button', { name: /Ingreso/ }).click()
+  await activo.getByRole('button', { name: /Sueldo mínimo/ }).click()
   await otro.getByText('¡Tu turno!').waitFor({ timeout: 15000 })
-  comprobar(true, 'el turno pasó al otro jugador tras un Ingreso')
+  comprobar(true, 'el turno pasó al otro jugador tras un Sueldo mínimo')
 } catch (e) {
   comprobar(false, `excepción: ${e.message}`)
 } finally {

@@ -7,14 +7,17 @@ import {
   type IntencionCliente,
   type JugadorSala,
   type MensajeHost,
+  type SalaInfo,
 } from '../shared/protocolo'
 import { crearLog, type Conexion, type Log } from '../shared/transporte'
 
 export interface EventosCliente {
   alBienvenida?(idJugador: string): void
-  alSala?(jugadores: JugadorSala[], iniciada: boolean): void
+  alSala?(sala: SalaInfo): void
   alEstado?(proyeccion: EstadoProyectado, eventos: EventoJuego[]): void
   alError?(codigo: string, mensaje: string): void
+  /** El anfitrión cerró la sala (mensaje explícito, sin esperar a que caiga la conexión). */
+  alSalaCerrada?(): void
   alCerrar?(): void
 }
 
@@ -63,6 +66,11 @@ export class ClienteConexion {
     this.conexion.enviar({ tipo: 'intencion', intencion })
   }
 
+  /** Marca o desmarca «estoy listo» (guía visual del lobby; el host lo valida). */
+  marcarListo(listo: boolean) {
+    this.conexion.enviar({ tipo: 'listo', listo })
+  }
+
   cerrar() {
     this.conexion.cerrar()
   }
@@ -78,7 +86,12 @@ export class ClienteConexion {
       case 'sala':
         this.jugadoresSala = msg.jugadores
         this.log.info('← sala', msg.jugadores.map((j) => `${j.nombre}${j.conectado ? '' : ' (off)'}`), msg.iniciada ? 'iniciada' : 'en lobby')
-        return this.eventos.alSala?.(msg.jugadores, msg.iniciada)
+        return this.eventos.alSala?.({
+          jugadores: msg.jugadores,
+          iniciada: msg.iniciada,
+          especiales: msg.especiales,
+          max: msg.max,
+        })
       case 'estado':
         this.ultimoEstado = msg.proyeccion
         this.log.info('← estado', msg.proyeccion.fase.tipo, `eventos nuevos: ${msg.eventos.length}`)
@@ -86,6 +99,9 @@ export class ClienteConexion {
       case 'error':
         this.log.warn('← error', msg.codigo, msg.mensaje)
         return this.eventos.alError?.(msg.codigo, msg.mensaje)
+      case 'salaCerrada':
+        this.log.info('← sala cerrada por el anfitrión')
+        return this.eventos.alSalaCerrada?.()
     }
   }
 }

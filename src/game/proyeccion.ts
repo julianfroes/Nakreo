@@ -19,10 +19,18 @@ export interface JugadorPublico {
   nombre: string
   creditos: number
   eliminado: boolean
+  /** Abandonó la partida (sus cartas quedaron en el descarte público). */
+  retirado: boolean
   /** Solo el NÚMERO de cartas ocultas; nunca cuáles son. */
   cartasVivas: number
   /** Cartas perdidas: están boca arriba para todos. */
-  cartasReveladas: Rol[]
+  cartasReveladas: CartaPerdida[]
+}
+
+/** Una carta perdida (pública): sin id, solo qué era. */
+export interface CartaPerdida {
+  rol: Rol
+  especial: boolean
 }
 
 export interface YoProyectado {
@@ -44,6 +52,8 @@ export type FaseProyectada =
   | { tipo: 'reasignando'; jugador: string; robadas?: Carta[] }
 
 export interface EstadoProyectado {
+  /** Modo de juego (público): false = sin roles especiales. */
+  especiales: boolean
   yo: YoProyectado
   jugadores: JugadorPublico[]
   /** Cantidad de cartas en el mazo (dato deliberadamente público, sin contenido). */
@@ -54,13 +64,16 @@ export interface EstadoProyectado {
   registro: EventoJuego[]
 }
 
+const copiarCarta = (c: Carta): Carta =>
+  c.especial ? { id: c.id, rol: c.rol, especial: true } : { id: c.id, rol: c.rol }
+
 function proyectarFase(fase: Fase, idJugador: string | null): FaseProyectada {
   if (fase.tipo === 'reasignando') {
     return fase.jugador === idJugador
       ? {
           tipo: 'reasignando',
           jugador: fase.jugador,
-          robadas: fase.robadas.map((c) => ({ id: c.id, rol: c.rol })),
+          robadas: fase.robadas.map(copiarCarta),
         }
       : { tipo: 'reasignando', jugador: fase.jugador } // sin `robadas`
   }
@@ -74,10 +87,13 @@ function proyectarJugadoresPublicos(estado: EstadoJuego): JugadorPublico[] {
     nombre: j.nombre,
     creditos: j.creditos,
     eliminado: j.eliminado,
+    retirado: j.retirado,
     cartasVivas: j.cartas.filter((c) => !c.revelada).length,
     // Solo las cartas ya perdidas (públicas). El `rol` de una carta viva ajena
     // jamás se lee aquí fuera de este filtro.
-    cartasReveladas: j.cartas.filter((c) => c.revelada).map((c) => c.rol),
+    cartasReveladas: j.cartas
+      .filter((c) => c.revelada)
+      .map((c) => ({ rol: c.rol, especial: !!c.especial })),
   }))
 }
 
@@ -86,11 +102,12 @@ export function proyectarEstado(estado: EstadoJuego, idJugador: string): EstadoP
   if (!yo) throw new Error(`Jugador desconocido: ${idJugador}`)
 
   return {
+    especiales: estado.especiales,
     yo: {
       id: yo.id,
       nombre: yo.nombre,
       creditos: yo.creditos,
-      mano: yo.cartas.map((c) => ({ id: c.id, rol: c.rol, revelada: c.revelada })),
+      mano: yo.cartas.map((c) => ({ ...copiarCarta(c), revelada: c.revelada })),
     },
     jugadores: proyectarJugadoresPublicos(estado),
     mazoRestante: estado.mazo.length,
@@ -107,16 +124,20 @@ export function proyectarEstado(estado: EstadoJuego, idJugador: string): EstadoP
  * las cartas robadas por el Ingeniero. No contiene ningún id de carta.
  */
 export interface EstadoPublico {
+  especiales: boolean
   jugadores: JugadorPublico[]
   mazoRestante: number
   turno: number
   jugadorActivo: string
-  fase: Exclude<FaseProyectada, { tipo: 'reasignando' }> | { tipo: 'reasignando'; jugador: string }
+  fase:
+    | Exclude<FaseProyectada, { tipo: 'reasignando' }>
+    | { tipo: 'reasignando'; jugador: string }
   registro: EventoJuego[]
 }
 
 export function proyectarPublico(estado: EstadoJuego): EstadoPublico {
   return {
+    especiales: estado.especiales,
     jugadores: proyectarJugadoresPublicos(estado),
     mazoRestante: estado.mazo.length,
     turno: estado.turno,

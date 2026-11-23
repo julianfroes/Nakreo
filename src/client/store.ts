@@ -7,7 +7,7 @@ import { create } from 'zustand'
 import type { EstadoProyectado } from '../game/proyeccion'
 import { normalizarCodigo } from '../shared/codigoSala'
 import { conectarPeer } from '../shared/peerTransporte'
-import type { IntencionCliente, JugadorSala } from '../shared/protocolo'
+import type { IntencionCliente, SalaInfo } from '../shared/protocolo'
 import type { HostServidor } from '../host/HostServidor'
 import type { Conexion } from '../shared/transporte'
 import { unirseASala, type ClienteConexion } from './ClienteConexion'
@@ -19,25 +19,44 @@ interface ClienteState {
   codigo: string | null
   nombre: string
   idJugador: string | null
-  sala: { jugadores: JugadorSala[]; iniciada: boolean } | null
+  sala: SalaInfo | null
   proyeccion: EstadoProyectado | null
   /** Mensaje de error para mostrar al usuario (se limpia con `limpiarError`). */
   error: string | null
+  /**
+   * El anfitrión rechazó la unión a esta sala (llena o ya iniciada): el botón
+   * «Unirme» queda bloqueado para ese código hasta que se pida reintentar.
+   */
+  rechazo: { codigo: string; motivo: string } | null
   /** Nº de intento de reconexión en curso (0 si no se está reconectando). */
   intento: number
   /** true entre enviar una intención y recibir la respuesta del host. */
   pendiente: boolean
+  /** Pedí abandonar (sala o partida) y espero la confirmación del host. */
+  saliendo: boolean
+  /** El host confirmó que me retiré de la partida: ya no puedo volver a entrar en ella. */
+  retirado: boolean
   unirse(codigo: string, nombre: string): Promise<void>
+  /** Como `unirse`, pero con otro transporte (para pruebas con conexiones en memoria). */
+  unirseConConector(codigo: string, nombre: string, conectar: (codigo: string) => Promise<Conexion>): Promise<void>
   /** El anfitrión se une a su propia sala por una conexión en memoria (sin reconexión ni sesión guardada). */
   unirseLocal(host: HostServidor, nombre: string): Promise<void>
   retomarSesion(codigoUrl: string | null): void
   enviar(intencion: IntencionCliente): void
   limpiarError(): void
+  limpiarRechazo(): void
+  /** «Estoy listo» en el lobby (guía visual). */
+  marcarListo(listo: boolean): void
+  /** Abandona la sala o la partida avisando al host (libera el asiento o retira al jugador). */
+  abandonar(): void
+  /** Cierra mi conexión y vuelve al inicio, sin avisar al host (o tras haberme retirado). */
   salir(): void
 }
 
 const CLAVE_SESION = 'nakreo-sesion'
-const ERRORES_FATALES = ['salaLlena', 'partidaEnCurso']
+const ERRORES_FATALES = ['salaLlena', 'partidaEnCurso', 'yaTienesAsiento', 'retirado']
+/** Si el host no responde a «salir» en este tiempo, se sale igualmente. */
+const ESPERA_SALIDA_MS = 3000
 const INTERVALO_REINTENTO_MS = 2000
 const MAX_REINTENTOS = 60
 /** Tras tantos "Sala no encontrada" seguidos al reconectar, se da por cerrada la sala. */
@@ -51,8 +70,11 @@ const inicial = {
   sala: null,
   proyeccion: null,
   error: null,
+  rechazo: null,
   intento: 0,
   pendiente: false,
+  saliendo: false,
+  retirado: false,
 }
 
 let cliente: ClienteConexion | null = null
@@ -71,16 +93,52 @@ export const useCliente = create<ClienteState>((set, get) => {
         if (!local) sessionStorage.setItem(CLAVE_SESION, JSON.stringify({ codigo, nombre }))
       },
       // Si el anfitrión vuelve al lobby (iniciada = false), se descarta la partida terminada.
-      alSala: (jugadores, iniciada) =>
-        set(iniciada ? { sala: { jugadores, iniciada } } : { sala: { jugadores, iniciada }, proyeccion: null }),
-      alEstado: (proyeccion) => set({ proyeccion, pendiente: false }),
+      alSala: (sala) => set(sala.iniciada ? { sala } : { sala, proyeccion: null }),
+      alEstado: (proyeccion) => {
+        const yo = proyeccion.jugadores.find((j) => j.id === proyeccion.yo.id)
+        if (yo?.retirado) {
+          // Me retiré: el host cierra mi conexión y no hay nada a lo que reconectar.
+          cierreDeliberado = true
+          if (temporizador) clearTimeout(temporizador)
+          sessionStorage.removeItem(CLAVE_SESION)
+          set({ proyeccion, pendiente: false, saliendo: false, retirado: true })
+          return
+        }
+        set({ proyeccion, pendiente: false })
+      },
+      alSalaCerrada: () => {
+        // El anfitrión cerró la sala a propósito: se sale al instante, sin reintentar.
+        get().salir()
+        set({ error: 'El anfitrión cerró la sala.' })
+      },
       alError: (c, mensaje) => {
-        if (ERRORES_FATALES.includes(c)) get().salir()
+        if (get().saliendo) {
+          // El host no aceptó mi salida: sigo en la sala.
+          cierreDeliberado = false
+          if (temporizador) clearTimeout(temporizador)
+          set({ saliendo: false })
+        }
+        if (ERRORES_FATALES.includes(c)) {
+          // El anfitrión no nos dejó entrar: se conserva el código y se bloquea «Unirme» para él.
+          const rechazado = get().codigo
+          get().salir()
+          set({
+            error: mensaje,
+            pendiente: false,
+            codigo: rechazado,
+            rechazo: rechazado ? { codigo: rechazado, motivo: c } : null,
+          })
+          return
+        }
         set({ error: mensaje, pendiente: false })
       },
       alCerrar: () => {
         // La conexión local solo se cierra al cerrar la sala: no hay a dónde reconectar.
-        if (!local && cliente === nuevo && !cierreDeliberado) reconectar(codigo, nombre, 1, 0)
+        if (local || cliente !== nuevo) return
+        if (!cierreDeliberado) return reconectar(codigo, nombre, 1, 0)
+        // Salí a propósito: si me retiré de una partida se queda la pantalla de despedida;
+        // si solo dejé la sala de espera, se vuelve al inicio.
+        if (get().saliendo && !get().retirado) get().salir()
       },
     })
     cliente = nuevo
@@ -114,12 +172,14 @@ export const useCliente = create<ClienteState>((set, get) => {
     ...inicial,
     nombre: '',
 
-    async unirse(codigoCrudo, nombre) {
+    unirse: (codigoCrudo, nombre) => get().unirseConConector(codigoCrudo, nombre, conectarPeer),
+
+    async unirseConConector(codigoCrudo, nombre, conectar) {
       const codigo = normalizarCodigo(codigoCrudo)
       if (!codigo) return set({ error: 'Código de sala inválido' })
       cierreDeliberado = false
       local = false
-      conector = conectarPeer
+      conector = conectar
       set({ ...inicial, conexion: 'conectando', codigo, nombre })
       try {
         await abrir(codigo, nombre)
@@ -160,6 +220,26 @@ export const useCliente = create<ClienteState>((set, get) => {
     },
 
     limpiarError: () => set({ error: null }),
+
+    limpiarRechazo: () => set({ error: null, rechazo: null }),
+
+    abandonar() {
+      if (!cliente) return get().salir()
+      cierreDeliberado = true // la conexión se cerrará a propósito: no reconectar
+      if (temporizador) clearTimeout(temporizador)
+      set({ saliendo: true, error: null })
+      try {
+        cliente.enviar({ tipo: 'salir' })
+      } catch {
+        return get().salir() // sin conexión: no hay a quién avisar
+      }
+      // Si el host no confirma, se sale de todos modos.
+      temporizador = setTimeout(() => get().salir(), ESPERA_SALIDA_MS)
+    },
+
+    marcarListo(listo) {
+      cliente?.marcarListo(listo)
+    },
 
     salir() {
       cierreDeliberado = true

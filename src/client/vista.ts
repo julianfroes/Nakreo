@@ -3,10 +3,10 @@
  * Es una función pura (testeable) y solo lee `EstadoProyectado`, así que no
  * puede mostrar nada que la proyección no haya entregado ya.
  */
-import { LIMITE_CREDITOS } from '../game/config'
+import { EXPLOSION_COSTE, LIMITE_CREDITOS } from '../game/config'
 import type { EstadoProyectado, JugadorPublico } from '../game/proyeccion'
-import { ACCIONES } from '../game/roles'
-import type { Accion, Carta, CartaEnMano, Rol, TipoAccion } from '../game/types'
+import { ACCIONES, accionDisponible, bloqueosVigentes } from '../game/roles'
+import type { Accion, Carta, CartaEnMano, Reaccion, Reclamo, Rol, TipoAccion } from '../game/types'
 
 export interface AccionUI {
   tipo: TipoAccion
@@ -14,20 +14,35 @@ export interface AccionUI {
   coste: number
   necesitaObjetivo: boolean
   rolRequerido: Rol | null
+  /** Requiere la carta especial del rol. */
+  especial: boolean
   habilitada: boolean
   /** Por qué está deshabilitada. */
   motivo?: string
 }
 
 export type Vista =
+  /** Abandoné la partida: ya no puedo volver a entrar en ella. */
+  | { tipo: 'retirado' }
   | { tipo: 'fin'; ganador: string; gane: boolean }
   | { tipo: 'eliminado' }
   | { tipo: 'elegirAccion'; acciones: AccionUI[]; objetivos: JugadorPublico[] }
   | { tipo: 'responderDesafio'; accion: Accion }
-  | { tipo: 'responderBloqueo'; accion: Accion; roles: Rol[] }
-  | { tipo: 'responderDesafioBloqueo'; accion: Accion; bloqueador: string; rol: Rol }
-  /** Me desafían: debo probar que tengo `rol` o rendirme. */
-  | { tipo: 'defenderse'; rol: Rol; desafiante: string; accion: Accion }
+  /**
+   * Puedo bloquear alegando alguno de `roles`. Si `explosion`, y soy el objetivo de un
+   * ataque, también puedo «explotar el site» desde aquí (a la vez; no hace falta bloquear antes).
+   */
+  | { tipo: 'responderBloqueo'; accion: Accion; roles: Reclamo[]; explosion: { pago: number } | null }
+  | { tipo: 'responderDesafioBloqueo'; accion: Accion; bloqueador: string; reclamo: Reclamo }
+  /** Me atacan (Demanda/Despido): puedo «explotar el site» (Ingeniero Especial). */
+  | { tipo: 'explotarSite'; accion: Accion; pago: number }
+  /** Alguien reacciona con una habilidad especial: ¿lo desafío? */
+  | { tipo: 'responderDesafioReaccion'; accion: Accion; reaccion: Reaccion }
+  /**
+   * Me desafían: debo probar que tengo `reclamo`, rendirme o (antes de mostrar
+   * carta) declarar que me salvo con el Jefe de Área Especial (Excusa de mérito).
+   */
+  | { tipo: 'defenderse'; reclamo: Reclamo; desafiante: string; accion: Accion; puedeSalvarse: boolean }
   | { tipo: 'perderCarta' }
   | { tipo: 'reasignar'; opciones: (Carta | CartaEnMano)[]; cuantas: number }
   | { tipo: 'esperando'; mensaje: string }
@@ -37,23 +52,26 @@ export const nombreDe = (p: EstadoProyectado, id: string): string =>
 
 function accionesDisponibles(p: EstadoProyectado): AccionUI[] {
   const creditos = p.yo.creditos
-  return (Object.keys(ACCIONES) as TipoAccion[]).map((tipo) => {
-    const d = ACCIONES[tipo]
-    let motivo: string | undefined
-    if (creditos < d.coste) motivo = `Necesitas ${d.coste} créditos`
-    else if (d.generaCreditos && creditos >= LIMITE_CREDITOS) {
-      motivo = `Con ${LIMITE_CREDITOS}+ créditos debes gastar`
-    }
-    return {
-      tipo,
-      nombre: d.nombre,
-      coste: d.coste,
-      necesitaObjetivo: d.necesitaObjetivo,
-      rolRequerido: d.rolRequerido,
-      habilitada: motivo === undefined,
-      motivo,
-    }
-  })
+  return (Object.keys(ACCIONES) as TipoAccion[])
+    .filter((tipo) => accionDisponible(tipo, p.especiales))
+    .map((tipo) => {
+      const d = ACCIONES[tipo]
+      let motivo: string | undefined
+      if (creditos < d.coste) motivo = `Necesitas ${d.coste} créditos`
+      else if (d.generaCreditos && creditos >= LIMITE_CREDITOS) {
+        motivo = `Con ${LIMITE_CREDITOS}+ créditos debes gastar`
+      }
+      return {
+        tipo,
+        nombre: d.nombre,
+        coste: d.coste,
+        necesitaObjetivo: d.necesitaObjetivo,
+        rolRequerido: d.rolRequerido,
+        especial: d.especial,
+        habilitada: motivo === undefined,
+        motivo,
+      }
+    })
 }
 
 function esperaA(p: EstadoProyectado, ids: string[]): string {
@@ -64,6 +82,7 @@ export function calcularVista(p: EstadoProyectado): Vista {
   const yo = p.yo.id
   const f = p.fase
 
+  if (p.jugadores.find((j) => j.id === yo)?.retirado) return { tipo: 'retirado' }
   if (f.tipo === 'fin') return { tipo: 'fin', ganador: f.ganador, gane: f.ganador === yo }
   if (p.yo.mano.every((c) => c.revelada)) return { tipo: 'eliminado' }
 
@@ -85,7 +104,12 @@ export function calcularVista(p: EstadoProyectado): Vista {
 
     case 'ventanaBloqueo':
       return f.pendientes.includes(yo)
-        ? { tipo: 'responderBloqueo', accion: f.accion, roles: ACCIONES[f.accion.tipo].bloqueablePor }
+        ? {
+            tipo: 'responderBloqueo',
+            accion: f.accion,
+            roles: bloqueosVigentes(f.accion.tipo, p.especiales),
+            explosion: f.explosion ? { pago: Math.min(EXPLOSION_COSTE, p.yo.creditos) } : null,
+          }
         : { tipo: 'esperando', mensaje: esperaA(p, f.pendientes) }
 
     case 'ventanaDesafioBloqueo':
@@ -94,13 +118,29 @@ export function calcularVista(p: EstadoProyectado): Vista {
             tipo: 'responderDesafioBloqueo',
             accion: f.accion,
             bloqueador: f.bloqueo.jugador,
-            rol: f.bloqueo.rol,
+            reclamo: { rol: f.bloqueo.rol, especial: f.bloqueo.especial },
           }
+        : { tipo: 'esperando', mensaje: esperaA(p, f.pendientes) }
+
+    case 'ventanaIngeniero':
+      return f.pendientes.includes(yo)
+        ? { tipo: 'explotarSite', accion: f.accion, pago: Math.min(EXPLOSION_COSTE, p.yo.creditos) }
+        : { tipo: 'esperando', mensaje: `${nombreDe(p, f.accion.objetivo ?? '')} decide si reacciona…` }
+
+    case 'ventanaDesafioReaccion':
+      return f.pendientes.includes(yo)
+        ? { tipo: 'responderDesafioReaccion', accion: f.accion, reaccion: f.reaccion }
         : { tipo: 'esperando', mensaje: esperaA(p, f.pendientes) }
 
     case 'revelacion':
       return f.acusado === yo
-        ? { tipo: 'defenderse', rol: f.rol, desafiante: f.desafiante, accion: f.accion }
+        ? {
+            tipo: 'defenderse',
+            reclamo: { rol: f.rol, especial: f.especial },
+            desafiante: f.desafiante,
+            accion: f.accion,
+            puedeSalvarse: p.especiales && f.origen !== 'reaccion',
+          }
         : { tipo: 'esperando', mensaje: `${nombreDe(p, f.acusado)} debe mostrar su carta…` }
 
     case 'perdiendoCarta':

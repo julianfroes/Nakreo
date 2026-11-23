@@ -147,9 +147,9 @@ describe('lobby', () => {
     for (const c of cs) expect(JSON.stringify(c.recibidos)).not.toMatch(/token-/)
   })
 
-  it('rechaza el séptimo jugador', () => {
+  it('rechaza el noveno jugador', () => {
     const { srv } = sala()
-    unir(srv, 6)
+    unir(srv, 8)
     const extra = srv.conectar()
     unirse(extra, 'Extra', tokenDe('extra'))
     expect(ultimo(extra, 'error')).toMatchObject({ codigo: 'salaLlena' })
@@ -189,7 +189,7 @@ describe('partida en red', () => {
     const { srv, host } = sala()
     const cs = unir(srv, 2)
     host.iniciarPartida()
-    cs[0].enviar({ tipo: 'intencion', intencion: { tipo: 'elegirAccion', accion: 'ingreso' } })
+    cs[0].enviar({ tipo: 'intencion', intencion: { tipo: 'elegirAccion', accion: 'sueldoMinimo' } })
 
     for (const c of cs) {
       const est = ultimo(c, 'estado') as Extract<MensajeHost, { tipo: 'estado' }>
@@ -205,11 +205,11 @@ describe('partida en red', () => {
     host.iniciarPartida()
 
     // b (que NO es el jugador activo) intenta actuar como j1.
-    b.enviar({ tipo: 'intencion', intencion: { tipo: 'elegirAccion', accion: 'ingreso', jugador: 'j1' } })
+    b.enviar({ tipo: 'intencion', intencion: { tipo: 'elegirAccion', accion: 'sueldoMinimo', jugador: 'j1' } })
     expect(ultimo(b, 'error')).toMatchObject({ codigo: 'noEsTuTurno' })
 
     // a (activo) intenta actuar como j2: se aplica igualmente a j1.
-    a.enviar({ tipo: 'intencion', intencion: { tipo: 'elegirAccion', accion: 'ingreso', jugador: 'j2' } })
+    a.enviar({ tipo: 'intencion', intencion: { tipo: 'elegirAccion', accion: 'sueldoMinimo', jugador: 'j2' } })
     const est = ultimo(a, 'estado') as Extract<MensajeHost, { tipo: 'estado' }>
     expect(est.proyeccion.jugadores.find((j) => j.id === 'j1')!.creditos).toBe(3)
     expect(est.proyeccion.jugadores.find((j) => j.id === 'j2')!.creditos).toBe(2)
@@ -220,7 +220,7 @@ describe('partida en red', () => {
     const [a, b] = unir(srv, 2)
     host.iniciarPartida()
     const antes = mensajes(b).length
-    a.enviar({ tipo: 'intencion', intencion: { tipo: 'elegirAccion', accion: 'golpe', objetivo: 'j2' } })
+    a.enviar({ tipo: 'intencion', intencion: { tipo: 'elegirAccion', accion: 'demandaLaboral', objetivo: 'j2' } })
     expect(ultimo(a, 'error')).toMatchObject({ codigo: 'creditosInsuficientes' })
     expect(mensajes(b).length).toBe(antes)
   })
@@ -312,7 +312,7 @@ describe('ClienteConexion', () => {
     expect(c1 instanceof ClienteConexion).toBe(true)
 
     host.iniciarPartida()
-    c1.enviar({ tipo: 'elegirAccion', accion: 'ingreso' })
+    c1.enviar({ tipo: 'elegirAccion', accion: 'sueldoMinimo' })
     expect(c2.ultimoEstado!.jugadorActivo).toBe('j2')
     expect(estados.length).toBeGreaterThan(2)
   })
@@ -349,7 +349,7 @@ describe('snapshot para la UI del anfitrión', () => {
     expect(texto).not.toMatch(/token-/)
     expect(texto).not.toMatch(/"id":\d/) // ningún id de carta
 
-    cs[0].enviar({ tipo: 'intencion', intencion: { tipo: 'elegirAccion', accion: 'ingreso' } })
+    cs[0].enviar({ tipo: 'intencion', intencion: { tipo: 'elegirAccion', accion: 'sueldoMinimo' } })
     expect(notificaciones.at(-1)!.mesa!.jugadorActivo).toBe('j2')
 
     cs[1].cerrar()
@@ -374,15 +374,17 @@ describe('snapshot para la UI del anfitrión', () => {
 })
 
 describe('reinicio de partida', () => {
-  /** Lleva la partida al fin: j2 se queda con una carta y j1 le da un golpe. */
+  /** Lleva la partida al fin: j2 se queda con una carta y j1 le pone una Demanda laboral. */
   function hastaElFin() {
     const { srv, host } = sala()
     const cs = unir(srv, 2)
     host.iniciarPartida()
     const interno = host as unknown as { estado: EstadoJuego }
     interno.estado.jugadores[1].cartas[1].revelada = true
+    interno.estado.jugadores[1].creditos = 0 // sin créditos no hay ventana de «explotar el site»
     interno.estado.jugadores[0].creditos = 7
-    cs[0].enviar({ tipo: 'intencion', intencion: { tipo: 'elegirAccion', accion: 'golpe', objetivo: 'j2' } })
+    cs[0].enviar({ tipo: 'intencion', intencion: { tipo: 'elegirAccion', accion: 'demandaLaboral', objetivo: 'j2' } })
+    cs[1].enviar({ tipo: 'intencion', intencion: { tipo: 'pasar' } }) // j2 no se cubre
     expect(host.snapshot().mesa!.fase.tipo).toBe('fin')
     return { srv, host, cs }
   }
@@ -434,5 +436,193 @@ describe('reinicio de partida', () => {
     expect(host.snapshot().puedeIniciar).toBe(true)
     host.iniciarPartida()
     expect(host.snapshot().mesa!.jugadores).toHaveLength(3)
+  })
+})
+
+describe('modo de juego y aforo de la sala', () => {
+  const salaSin = () => {
+    const srv = new ServidorFalso()
+    const host = new HostServidor('ABCDE', srv, { ...opciones, especiales: false })
+    return { srv, host }
+  }
+  const sala_ = (c: ExtremoFalso) => ultimo(c, 'sala') as Extract<MensajeHost, { tipo: 'sala' }>
+
+  it('anuncia el modo y el aforo a los jugadores', () => {
+    const { srv, host } = sala()
+    const [a] = unir(srv, 2)
+    expect(sala_(a)).toMatchObject({ especiales: true, max: 8, iniciada: false })
+    expect(host.snapshot()).toMatchObject({ especiales: true, max: 8 })
+
+    const { srv: srvB, host: hostB } = salaSin()
+    const [b] = unir(srvB, 2)
+    expect(sala_(b)).toMatchObject({ especiales: false, max: 6 })
+    expect(hostB.snapshot()).toMatchObject({ especiales: false, max: 6 })
+  })
+
+  it('sin roles especiales la sala se llena con 6 y el séptimo ve «Sala llena (6/6)»', () => {
+    const { srv } = salaSin()
+    unir(srv, 6)
+    const extra = srv.conectar()
+    unirse(extra, 'Extra', tokenDe('extra'))
+    expect(ultimo(extra, 'error')).toMatchObject({ codigo: 'salaLlena', mensaje: 'Sala llena (6/6)' })
+  })
+
+  it('con roles especiales caben 8 y el noveno ve «Sala llena (8/8)»', () => {
+    const { srv } = sala()
+    unir(srv, 8)
+    const extra = srv.conectar()
+    unirse(extra, 'Extra', tokenDe('extra'))
+    expect(ultimo(extra, 'error')).toMatchObject({ codigo: 'salaLlena', mensaje: 'Sala llena (8/8)' })
+  })
+
+  it('un jugador que ya tenía asiento puede reconectar aunque la sala esté llena', () => {
+    const { srv } = salaSin()
+    const cs = unir(srv, 6)
+    cs[2].cerrar()
+    const vuelve = srv.conectar()
+    unirse(vuelve, 'Jugador3', tokenDe('3'))
+    expect(ultimo(vuelve, 'bienvenida')).toMatchObject({ idJugador: 'j3' })
+  })
+
+  it('la partida usa el modo de la sala (mazo de 15, sin especiales) y los clientes lo ven', () => {
+    const { srv, host } = salaSin()
+    const cs = unir(srv, 3)
+    host.iniciarPartida()
+    const interno = host as unknown as { estado: EstadoJuego }
+    const todas = [...interno.estado.mazo, ...interno.estado.jugadores.flatMap((j) => j.cartas)]
+    expect(interno.estado.especiales).toBe(false)
+    expect(todas).toHaveLength(15)
+    expect(todas.some((c) => c.especial)).toBe(false)
+    const est = ultimo(cs[0], 'estado') as Extract<MensajeHost, { tipo: 'estado' }>
+    expect(est.proyeccion.especiales).toBe(false)
+    expect(host.snapshot().mesa?.especiales).toBe(false)
+  })
+
+  describe('cambiar el modo en la sala de espera', () => {
+    it('avisa a todos, vacía los «listo» y cambia el aforo', () => {
+      const { srv, host } = sala()
+      const [a, b] = unir(srv, 3)
+      a.enviar({ tipo: 'listo', listo: true })
+      expect(host.snapshot().jugadores.filter((j) => j.listo)).toHaveLength(1)
+
+      host.cambiarModo(false)
+      expect(host.snapshot()).toMatchObject({ especiales: false, max: 6 })
+      expect(host.snapshot().jugadores.some((j) => j.listo)).toBe(false)
+      expect(sala_(a)).toMatchObject({ especiales: false, max: 6 })
+      expect(sala_(b)).toMatchObject({ especiales: false, max: 6 })
+
+      host.cambiarModo(true)
+      expect(sala_(b)).toMatchObject({ especiales: true, max: 8 })
+    })
+
+    it('se rechaza si hay más jugadores de los que caben en el modo nuevo', () => {
+      const { srv, host } = sala()
+      unir(srv, 7)
+      expect(() => host.cambiarModo(false)).toThrow(/7 jugadores/)
+      expect(host.snapshot()).toMatchObject({ especiales: true, max: 8 })
+      // Con 6 sí cabe.
+      const { srv: srv6, host: host6 } = sala()
+      unir(srv6, 6)
+      expect(() => host6.cambiarModo(false)).not.toThrow()
+    })
+
+    it('no se puede con la partida en curso, pero sí tras volver al lobby', () => {
+      const { srv, host } = sala()
+      unir(srv, 2)
+      host.iniciarPartida()
+      expect(() => host.cambiarModo(false)).toThrow(/en curso/)
+
+      const interno = host as unknown as { estado: EstadoJuego }
+      interno.estado.fase = { tipo: 'fin', ganador: 'j1' } // fin de partida
+      host.volverAlLobby()
+      expect(() => host.cambiarModo(false)).not.toThrow()
+      expect(host.snapshot().especiales).toBe(false)
+    })
+
+    it('«jugar de nuevo» conserva el modo', () => {
+      const { srv, host } = salaSin()
+      unir(srv, 2)
+      host.iniciarPartida()
+      const interno = host as unknown as { estado: EstadoJuego }
+      interno.estado.fase = { tipo: 'fin', ganador: 'j1' }
+      host.reiniciarPartida()
+      expect(interno.estado.especiales).toBe(false)
+      expect(interno.estado.mazo.length + interno.estado.jugadores.length * 2).toBe(15)
+    })
+
+    it('un cliente no puede cambiar el modo (solo el anfitrión, por su API local)', () => {
+      const { srv, host } = sala()
+      const [a] = unir(srv, 2)
+      a.enviar({ tipo: 'cambiarModo', especiales: false })
+      expect(ultimo(a, 'error')).toMatchObject({ codigo: 'mensajeInvalido' })
+      expect(host.snapshot().especiales).toBe(true)
+    })
+  })
+
+  describe('«estoy listo» (guía visual)', () => {
+    it('se marca y se desmarca, y se anuncia a todos', () => {
+      const { srv, host } = sala()
+      const [a, b] = unir(srv, 2)
+      a.enviar({ tipo: 'listo', listo: true })
+      expect(host.snapshot().jugadores.map((j) => j.listo)).toEqual([true, false])
+      expect(sala_(b).jugadores.map((j) => j.listo)).toEqual([true, false])
+      a.enviar({ tipo: 'listo', listo: false })
+      expect(host.snapshot().jugadores.map((j) => j.listo)).toEqual([false, false])
+    })
+
+    it('no condiciona el inicio: se puede iniciar sin que nadie esté listo', () => {
+      const { srv, host } = sala()
+      unir(srv, 2)
+      expect(host.snapshot().puedeIniciar).toBe(true)
+      expect(() => host.iniciarPartida()).not.toThrow()
+    })
+
+    it('un desconectado no aparece como listo', () => {
+      const { srv, host } = sala()
+      const [a] = unir(srv, 2)
+      a.enviar({ tipo: 'listo', listo: true })
+      a.cerrar()
+      expect(host.snapshot().jugadores[0]).toMatchObject({ conectado: false, listo: false })
+    })
+
+    it('exige estar unido, estar en el lobby y un booleano', () => {
+      const { srv, host } = sala()
+      const intruso = srv.conectar()
+      intruso.enviar({ tipo: 'listo', listo: true })
+      expect(ultimo(intruso, 'error')).toMatchObject({ codigo: 'noUnido' })
+
+      const [a] = unir(srv, 2)
+      a.enviar({ tipo: 'listo', listo: 'sí' })
+      expect(ultimo(a, 'error')).toMatchObject({ codigo: 'mensajeInvalido' })
+
+      host.iniciarPartida()
+      a.enviar({ tipo: 'listo', listo: true })
+      expect(ultimo(a, 'error')).toMatchObject({ codigo: 'faseIncorrecta' })
+    })
+
+    it('al volver al lobby todos quedan sin marcar', () => {
+      const { srv, host } = sala()
+      const [a] = unir(srv, 2)
+      a.enviar({ tipo: 'listo', listo: true })
+      host.iniciarPartida()
+      const interno = host as unknown as { estado: EstadoJuego }
+      interno.estado.fase = { tipo: 'fin', ganador: 'j1' }
+      host.volverAlLobby()
+      expect(host.snapshot().jugadores.some((j) => j.listo)).toBe(false)
+    })
+  })
+
+  describe('motivo por el que no se puede iniciar', () => {
+    it('explica qué falta', () => {
+      const { srv, host } = sala()
+      expect(host.snapshot()).toMatchObject({ puedeIniciar: false, motivoBloqueo: 'Faltan 2 jugadores (mínimo 2).' })
+      const [a] = unir(srv, 1)
+      expect(host.snapshot().motivoBloqueo).toBe('Faltan 1 jugador (mínimo 2).')
+      unirse(srv.conectar(), 'Otro', tokenDe('otro'))
+      expect(host.snapshot()).toMatchObject({ puedeIniciar: true, motivoBloqueo: null })
+      a.cerrar()
+      expect(host.snapshot().motivoBloqueo).toMatch(/desconectados: Jugador1/)
+      expect(host.snapshot().puedeIniciar).toBe(false)
+    })
   })
 })

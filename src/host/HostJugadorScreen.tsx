@@ -1,26 +1,23 @@
-import { useEffect, useState } from 'react'
-import { Juego } from '../client/components/Juego'
-import { useCliente } from '../client/store'
+import { useState } from 'react'
 import { MAX_NOMBRE } from '../shared/protocolo'
 import { Button } from '../shared/components/Button'
 import { navigate } from '../shared/useHashRoute'
-import { CerrarSalaConfirmar, ControlesFin } from './components/ControlesAnfitrion'
-import { Lobby } from './components/Lobby'
-import { obtenerHost, useHost } from './hostStore'
-
-const CLAVE_NOMBRE = 'nakreo-nombre'
+import { InterruptorModo } from './components/InterruptorModo'
+import { guardarNombre, leerNombre, useSinEspeciales } from './preferencias'
+import { SalaAnfitrion } from './SalaAnfitrion'
 
 /**
- * Anfitrión que también juega. Este navegador administra la sala (como la mesa)
- * pero su pantalla es la de un JUGADOR: ve solo su proyección privada, nunca la
- * vista general. Se une a su propia sala por una conexión local en memoria, así
- * que pasa por las mismas validaciones y proyecciones que cualquier teléfono.
+ * Anfitrión que también juega desde el principio. Este navegador administra la
+ * sala pero su pantalla es la de un JUGADOR: ve solo su proyección privada,
+ * nunca la vista general. Se une a su propia sala por una conexión local en
+ * memoria, así que pasa por las mismas validaciones y proyecciones que un teléfono.
  */
 export function HostJugadorScreen() {
-  const [nombre, setNombre] = useState(() => localStorage.getItem(CLAVE_NOMBRE) ?? '')
+  const [nombre, setNombre] = useState(leerNombre)
   const [empezar, setEmpezar] = useState(false)
+  const [sinEspeciales, setSinEspeciales] = useSinEspeciales()
 
-  if (empezar) return <SalaJugador nombre={nombre.trim()} />
+  if (empezar) return <SalaAnfitrion especiales={!sinEspeciales} nombreInicial={nombre.trim()} />
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center gap-4 p-6">
@@ -36,10 +33,11 @@ export function HostJugadorScreen() {
         autoComplete="nickname"
         onChange={(e) => setNombre(e.target.value)}
       />
+      <InterruptorModo sinEspeciales={sinEspeciales} onCambio={setSinEspeciales} />
       <Button
         disabled={!nombre.trim()}
         onClick={() => {
-          localStorage.setItem(CLAVE_NOMBRE, nombre.trim())
+          guardarNombre(nombre.trim())
           setEmpezar(true)
         }}
       >
@@ -48,49 +46,4 @@ export function HostJugadorScreen() {
       <Button variant="secondary" onClick={() => navigate('/')}>Volver</Button>
     </main>
   )
-}
-
-function SalaJugador({ nombre }: { nombre: string }) {
-  const { snapshot, error, crearSala, cerrarSala } = useHost()
-  const proyeccion = useCliente((s) => s.proyeccion)
-
-  useEffect(() => {
-    // `vigente` evita unirse a una sala ya cerrada (StrictMode monta dos veces en desarrollo).
-    let vigente = true
-    void (async () => {
-      await crearSala()
-      const host = obtenerHost()
-      if (vigente && host) await useCliente.getState().unirseLocal(host, nombre)
-    })()
-    return () => {
-      vigente = false
-      useCliente.getState().salir()
-      cerrarSala()
-    }
-  }, [crearSala, cerrarSala, nombre])
-
-  if (error && !snapshot) {
-    return (
-      <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center gap-4 p-6">
-        <p className="text-center text-rose-400">{error}</p>
-        <Button onClick={() => void crearSala()}>Reintentar</Button>
-        <Button variant="secondary" onClick={() => navigate('/')}>Volver</Button>
-      </main>
-    )
-  }
-  if (!snapshot) {
-    return <main className="flex min-h-dvh items-center justify-center text-slate-400">Creando sala…</main>
-  }
-  // Partida en curso: solo la vista de jugador (proyección privada), nunca la mesa general.
-  if (snapshot.iniciada && proyeccion) {
-    return (
-      <Juego
-        p={proyeccion}
-        modoAnfitrion
-        menuAnfitrion={<CerrarSalaConfirmar />}
-        controlesFin={<ControlesFin s={snapshot} />}
-      />
-    )
-  }
-  return <Lobby s={snapshot} />
 }

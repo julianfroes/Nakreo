@@ -2,11 +2,14 @@ import { useEffect, useRef } from 'react'
 import type { EstadoPublico, JugadorPublico } from '../../game/proyeccion'
 import { MIN_JUGADORES } from '../../game/config'
 import { Button } from '../../shared/components/Button'
-import { ROL_UI } from '../../shared/rolesUI'
-import { describirFase, textoEvento } from '../../shared/textos'
+import { nombreModo } from '../../shared/reglasContenido'
+import { IconoRol } from '../../shared/iconos/IconoRol'
+import { uiCarta } from '../../shared/rolesUI'
+import { colorEvento, describirFase, textoEvento } from '../../shared/textos'
 import { navigate } from '../../shared/useHashRoute'
 import type { SnapshotHost } from '../HostServidor'
 import { AvisoSenalizacion } from './AvisoSenalizacion'
+import { CerrarSalaConfirmar } from './ControlesAnfitrion'
 import { useHost } from '../hostStore'
 
 /** Cuántos eventos recientes se considera "reciente" para resaltar la última carta mostrada. */
@@ -31,7 +34,9 @@ function TarjetaJugador({
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
         {activo && !j.eliminado && <span className="rounded bg-cyan-500 px-2 py-0.5 font-bold text-slate-950">TURNO</span>}
-        {j.eliminado && <span className="rounded bg-rose-800 px-2 py-0.5 font-bold">ELIMINADO</span>}
+        {j.eliminado && (
+          <span className="rounded bg-rose-800 px-2 py-0.5 font-bold">{j.retirado ? 'RETIRADO' : 'ELIMINADO'}</span>
+        )}
         {!conectado && !j.eliminado && <span className="rounded bg-amber-600 px-2 py-0.5 font-bold text-slate-950">DESCONECTADO</span>}
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -40,13 +45,16 @@ function TarjetaJugador({
             🂠
           </span>
         ))}
-        {j.cartasReveladas.map((rol, i) => (
+        {j.cartasReveladas.map((c, i) => (
           <span
             key={i}
-            className={`rounded-md border px-2 py-1 text-sm opacity-70 2xl:px-3 2xl:py-2 2xl:text-xl ${ROL_UI[rol].borde}`}
+            className={`rounded-md border px-2 py-1 text-sm opacity-70 2xl:px-3 2xl:py-2 2xl:text-xl ${uiCarta(c.rol, c.especial).borde}`}
             title="Carta perdida"
           >
-            {ROL_UI[rol].icono} {ROL_UI[rol].nombre}
+            <span className="inline-flex items-center gap-1.5">
+              <IconoRol rol={c.rol} especial={c.especial} tamano={24} decorativo className="2xl:size-8" />
+              {uiCarta(c.rol, c.especial).nombre}
+            </span>
           </span>
         ))}
       </div>
@@ -56,7 +64,7 @@ function TarjetaJugador({
 
 function CentroMesa({ mesa }: { mesa: EstadoPublico }) {
   const nombre = (id: string) => mesa.jugadores.find((j) => j.id === id)?.nombre ?? id
-  const perdidas = mesa.jugadores.flatMap((j) => j.cartasReveladas.map((rol) => ({ rol, dueno: j.nombre })))
+  const perdidas = mesa.jugadores.flatMap((j) => j.cartasReveladas.map((c) => ({ ...c, dueno: j.nombre })))
 
   // Última carta mostrada en un desafío, solo si ocurrió hace poco.
   const idx = mesa.registro.findLastIndex((e) => e.tipo === 'cartaMostrada')
@@ -64,14 +72,18 @@ function CentroMesa({ mesa }: { mesa: EstadoPublico }) {
 
   return (
     <section className="flex flex-1 flex-col items-center justify-center gap-4 rounded-3xl border border-slate-700 bg-slate-900/60 p-6 text-center 2xl:gap-8">
-      <p className="text-sm uppercase tracking-widest text-slate-500">Turno {mesa.turno}</p>
+      <p className="text-sm uppercase tracking-widest text-slate-500">
+        Turno {mesa.turno} · {nombreModo(mesa.especiales)}
+      </p>
       <p className="text-2xl font-semibold leading-snug xl:text-4xl 2xl:text-6xl">{describirFase(mesa)}</p>
 
       {mostrada?.tipo === 'cartaMostrada' && (
-        <div key={idx} className={`animate-entrada rounded-2xl border-2 bg-gradient-to-b px-8 py-4 ${ROL_UI[mostrada.rol].borde} ${ROL_UI[mostrada.rol].fondo}`}>
+        <div key={idx} className={`animate-entrada rounded-2xl border-2 bg-gradient-to-b px-8 py-4 ${uiCarta(mostrada.rol, mostrada.especial).borde} ${uiCarta(mostrada.rol, mostrada.especial).fondo}`}>
           <p className="text-sm text-slate-300">{nombre(mostrada.jugador)} muestra</p>
-          <p className="text-5xl">{ROL_UI[mostrada.rol].icono}</p>
-          <p className="text-xl font-bold">{ROL_UI[mostrada.rol].nombre}</p>
+          <div className="mx-auto my-1 size-16 2xl:size-24">
+            <IconoRol rol={mostrada.rol} especial={mostrada.especial} tamano="auto" decorativo />
+          </div>
+          <p className="text-xl font-bold">{uiCarta(mostrada.rol, mostrada.especial).nombre}</p>
         </div>
       )}
 
@@ -82,8 +94,11 @@ function CentroMesa({ mesa }: { mesa: EstadoPublico }) {
         <div className="flex flex-wrap justify-center gap-2">
           {perdidas.length === 0 && <span className="text-slate-600">Ninguna todavía</span>}
           {perdidas.map((c, i) => (
-            <span key={i} className={`rounded-lg border px-3 py-2 ${ROL_UI[c.rol].borde}`} title={`Perdida por ${c.dueno}`}>
-              {ROL_UI[c.rol].icono} <span className="text-sm">{ROL_UI[c.rol].nombre}</span>
+            <span key={i} className={`rounded-lg border px-3 py-2 ${uiCarta(c.rol, c.especial).borde}`} title={`Perdida por ${c.dueno}`}>
+              <span className="inline-flex items-center gap-1.5">
+                <IconoRol rol={c.rol} especial={c.especial} tamano={24} decorativo />
+                <span className="text-sm">{uiCarta(c.rol, c.especial).nombre}</span>
+              </span>
               <span className="block text-xs text-slate-500">{c.dueno}</span>
             </span>
           ))}
@@ -102,21 +117,17 @@ function Registro({ mesa }: { mesa: EstadoPublico }) {
     el?.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [mesa.registro.length])
 
-  const destacado = (t: string) =>
-    t === 'desafioLanzado' || t === 'cartaPerdida' || t === 'jugadorEliminado'
-      ? 'text-rose-300'
-      : t === 'partidaTerminada' || t === 'turnoIniciado'
-        ? 'text-cyan-300'
-        : 'text-slate-300'
-
   return (
     <aside className="flex max-h-[50dvh] min-h-0 flex-col rounded-3xl border border-slate-700 bg-slate-900/60 lg:max-h-none">
       <h2 className="border-b border-slate-700 px-4 py-3 text-lg font-bold">Registro</h2>
       <ol ref={lista} className="flex-1 space-y-1 overflow-y-auto px-4 py-3 text-base xl:text-lg 2xl:space-y-2 2xl:text-2xl" aria-live="polite">
         {mesa.registro.map((e, i) => (
-          <li key={i} className={destacado(e.tipo)}>{textoEvento(e, nombre)}</li>
+          <li key={i} className={colorEvento(e.tipo)}>{textoEvento(e, nombre)}</li>
         ))}
       </ol>
+      <div className="border-t border-slate-700 p-3">
+        <CerrarSalaConfirmar />
+      </div>
     </aside>
   )
 }
