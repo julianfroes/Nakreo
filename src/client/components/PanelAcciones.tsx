@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { JugadorPublico } from '../../game/proyeccion'
 import type { TipoAccion } from '../../game/types'
+import { Monedas, Vidas } from './BarraEstado'
 import { Button } from '../../shared/components/Button'
 import { IconoRol } from '../../shared/iconos/IconoRol'
 import { nombreReclamo } from '../../game/roles'
@@ -28,7 +29,11 @@ export function PanelAcciones({ acciones, objetivos, pendiente, onElegir }: Prop
             disabled={pendiente}
             onClick={() => onElegir(elegida.tipo, o.id)}
           >
-            {o.nombre} <span className="text-sm text-slate-400">◈{o.creditos} 🂠{o.cartasVivas}</span>
+            {o.nombre}{' '}
+            <span className="ml-1 inline-flex items-center gap-2 text-base font-bold">
+              <Monedas n={o.creditos} />
+              <Vidas vivas={o.cartasVivas} perdidas={[]} />
+            </span>
           </Button>
         ))}
         <Button variant="secondary" className="md:col-span-2" onClick={() => setElegida(null)}>
