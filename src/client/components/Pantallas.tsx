@@ -2,7 +2,9 @@ import { useState, type ReactNode } from 'react'
 import { normalizarCodigo } from '../../shared/codigoSala'
 import { Button } from '../../shared/components/Button'
 import { Aforo, EstadoJugadorSala } from '../../shared/components/EstadoJugadorSala'
+import { PanelGaleriaCartas } from '../../shared/components/GaleriaCartas'
 import { PanelReglas } from '../../shared/components/PanelReglas'
+import { GALERIA_CARTAS_VISIBLE } from '../../shared/galeriaCartas'
 import { nombreModo } from '../../shared/reglasContenido'
 import { navigate } from '../../shared/useHashRoute'
 import { useCliente } from '../store'
@@ -77,6 +79,7 @@ export function Lobby() {
   const { sala, codigo, idJugador, abandonar, saliendo, marcarListo } = useCliente()
   const yo = sala?.jugadores.find((j) => j.id === idJugador)
   const [reglas, setReglas] = useState(false)
+  const [cartas, setCartas] = useState(false)
   return (
     <main className={caja}>
       <h1 className="text-center text-3xl font-bold">Sala {codigo}</h1>
@@ -111,6 +114,14 @@ export function Lobby() {
       <Button variant="secondary" onClick={() => setReglas(true)}>
         <span aria-hidden>📖</span> Reglas
       </Button>
+      {GALERIA_CARTAS_VISIBLE && (
+        <>
+          <Button variant="secondary" onClick={() => setCartas(true)}>
+            <span aria-hidden>🃏</span> Cartas
+          </Button>
+          <PanelGaleriaCartas abierto={cartas} onCerrar={() => setCartas(false)} />
+        </>
+      )}
       <PanelReglas abierto={reglas} onCerrar={() => setReglas(false)} modo="reglas" especiales={sala?.especiales ?? true} />
       <Button variant="secondary" disabled={saliendo} onClick={abandonar}>
         {saliendo ? 'Saliendo…' : 'Salir'}
