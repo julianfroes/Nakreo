@@ -39,7 +39,7 @@ export function ModalDefensa({
       <p className="text-center text-sm text-slate-300">Elige una carta:</p>
       <div className="flex gap-3">
         {vivas.map((c) => (
-          <CartaRol key={c.id} rol={c.rol} especial={c.especial} seleccionada={sel === c.id} onClick={() => setSel(c.id)} />
+          <CartaRol key={c.id} id={c.id} rol={c.rol} especial={c.especial} seleccionada={sel === c.id} onClick={() => setSel(c.id)} />
         ))}
       </div>
       <Button disabled={sel === null || pendiente} onClick={() => enviar({ tipo: 'revelarCarta', cartaId: sel! })}>
@@ -80,7 +80,7 @@ export function ElegirCartaAPerder({ p, pendiente, enviar }: Comun) {
     <Overlay alerta titulo="Pierdes una carta" subtitulo="Elige cuál sacrificar">
       <div className="flex gap-3">
         {vivas.map((c) => (
-          <CartaRol key={c.id} rol={c.rol} especial={c.especial} seleccionada={sel === c.id} onClick={() => setSel(c.id)} />
+          <CartaRol key={c.id} id={c.id} rol={c.rol} especial={c.especial} seleccionada={sel === c.id} onClick={() => setSel(c.id)} />
         ))}
       </div>
       <Button variant="danger" disabled={sel === null || pendiente} onClick={() => enviar({ tipo: 'elegirCartaAPerder', cartaId: sel! })}>
@@ -102,7 +102,7 @@ export function Reasignacion({
     <Overlay titulo="Reasignación" subtitulo={`Conserva ${cuantas} carta${cuantas > 1 ? 's' : ''}; el resto vuelve al mazo`}>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {opciones.map((c) => (
-          <CartaRol key={c.id} rol={c.rol} especial={c.especial} seleccionada={elegidas.includes(c.id)} onClick={() => alternar(c.id)} />
+          <CartaRol key={c.id} id={c.id} rol={c.rol} especial={c.especial} seleccionada={elegidas.includes(c.id)} onClick={() => alternar(c.id)} />
         ))}
       </div>
       <Button

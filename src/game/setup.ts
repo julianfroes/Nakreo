@@ -37,12 +37,14 @@ export function crearPartida(
     throw new Error('Los ids de jugador deben ser únicos')
   }
 
-  let siguienteId = 0
-  const todas: Carta[] = TODOS_LOS_ROLES.flatMap((rol) => [
-    ...Array.from({ length: COPIAS_POR_ROL }, () => ({ id: siguienteId++, rol })),
+  // Cada rol ocupa un tramo fijo de ids (normales y luego la especial), también sin especiales:
+  // así el id identifica a la carta física y fija su arte (ver `shared/arteCartas`).
+  const porRol = COPIAS_POR_ROL + COPIAS_ESPECIALES_POR_ROL
+  const todas: Carta[] = TODOS_LOS_ROLES.flatMap((rol, r) => [
+    ...Array.from({ length: COPIAS_POR_ROL }, (_, k) => ({ id: r * porRol + k, rol })),
     ...(especiales
-      ? Array.from({ length: COPIAS_ESPECIALES_POR_ROL }, () => ({
-          id: siguienteId++, rol, especial: true,
+      ? Array.from({ length: COPIAS_ESPECIALES_POR_ROL }, (_, k) => ({
+          id: r * porRol + COPIAS_POR_ROL + k, rol, especial: true,
         }))
       : []),
   ])

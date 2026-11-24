@@ -1,10 +1,13 @@
 import type { Rol } from '../../game/types'
 import { IconoRol } from '../../shared/iconos/IconoRol'
+import { claveArte, urlArte } from '../../shared/arteCartas'
 import { uiCarta } from '../../shared/rolesUI'
 
 interface Props {
   rol: Rol
   especial?: boolean
+  /** Id de la carta física: fija su arte. Sin él (o sin imagen subida) se muestra el icono del rol. */
+  id?: number
   /** Carta perdida (boca arriba para todos). */
   perdida?: boolean
   oculta?: boolean
@@ -13,8 +16,9 @@ interface Props {
 }
 
 /** Una carta de rol: icono, nombre y descripción breve. */
-export function CartaRol({ rol, especial, perdida, oculta, seleccionada, onClick }: Props) {
+export function CartaRol({ rol, id, especial, perdida, oculta, seleccionada, onClick }: Props) {
   const ui = uiCarta(rol, especial)
+  const arte = id === undefined ? undefined : urlArte(claveArte({ id, rol, especial }))
   const interactiva = !!onClick && !perdida
   const clases = [
     'flex min-h-48 flex-1 flex-col items-center gap-2 rounded-2xl border-2 bg-gradient-to-b p-3 text-center transition-all lg:min-h-56 lg:gap-2 lg:p-4',
@@ -28,9 +32,21 @@ export function CartaRol({ rol, especial, perdida, oculta, seleccionada, onClick
     <span className="m-auto text-5xl" aria-label="Carta oculta">🂠</span>
   ) : (
     <>
-      <span className="block size-16 lg:size-[4.5rem]">
-        <IconoRol rol={rol} especial={especial} tamano="auto" decorativo />
-      </span>
+      {arte ? (
+        <img
+          src={arte}
+          alt=""
+          width={800}
+          height={600}
+          loading="lazy"
+          decoding="async"
+          className="aspect-[4/3] w-full rounded-lg object-cover"
+        />
+      ) : (
+        <span className="block size-16 lg:size-[4.5rem]">
+          <IconoRol rol={rol} especial={especial} tamano="auto" decorativo />
+        </span>
+      )}
       <span className="text-base font-bold leading-tight lg:text-xl">{ui.nombre}</span>
       <span className="text-xs leading-snug text-slate-300 lg:text-sm">{ui.descripcion}</span>
       {perdida && (

@@ -19,7 +19,7 @@ export function Mano({ mano }: { mano: CartaEnMano[] }) {
       </div>
       <div className="flex gap-3 lg:mx-auto lg:max-w-xl lg:gap-5">
         {mano.map((c) => (
-          <CartaRol key={c.id} rol={c.rol} especial={c.especial} perdida={c.revelada} oculta={oculta && !c.revelada} />
+          <CartaRol key={c.id} id={c.id} rol={c.rol} especial={c.especial} perdida={c.revelada} oculta={oculta && !c.revelada} />
         ))}
       </div>
     </section>
